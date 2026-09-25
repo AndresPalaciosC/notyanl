@@ -39,3 +39,18 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# datos de la aplicación (base de datos SQLite y archivos subidos)
+/data
+
+# credenciales en claro: nunca al repositorio
+/CREDENCIALES.txt
+
+# paquete de subida al hosting: se regenera cuando haga falta
+/notyac-para-subir.zip
+
+# el .env del servidor, con credenciales en claro: nunca al repositorio
+/ENV/
+
+# el ejemplo de variables sí se versiona
+!.env.example

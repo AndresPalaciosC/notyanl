@@ -1,26 +1,187 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  --color-paper: #ffffff;
+  --color-surface: #f6f6f3;
+  --color-surface-strong: #ecece7;
+  --color-ink: #12141a;
+  --color-ink-soft: #3f4551;
+  --color-muted: #6d7382;
+  --color-line: #e0e1e6;
+  --color-accent: #b3121b;
+  --color-accent-dark: #8b0d14;
+  --color-accent-soft: #fdeced;
+
+  --font-serif: var(--font-headline), Georgia, "Times New Roman", serif;
+  --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  body {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-serif);
+    letter-spacing: -0.015em;
+  }
+
+  ::selection {
+    background: var(--color-accent);
+    color: #fff;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Recorta cualquier imagen al alto de línea deseado. */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ---------------------------------------------------------------
+   Cuerpo de la nota. Se aplica al HTML guardado desde el editor,
+   tanto en el sitio público como en la vista previa del panel.
+   --------------------------------------------------------------- */
+.note-body {
+  font-size: 1.0625rem;
+  line-height: 1.75;
+  color: var(--color-ink-soft);
+}
+
+.note-body > * + * {
+  margin-top: 1.15em;
+}
+
+.note-body p {
+  text-wrap: pretty;
+}
+
+.note-body h2,
+.note-body h3,
+.note-body h4 {
+  color: var(--color-ink);
+  font-family: var(--font-serif);
+  line-height: 1.25;
+  margin-top: 1.9em;
+}
+
+.note-body h2 {
+  font-size: 1.6rem;
+}
+.note-body h3 {
+  font-size: 1.3rem;
+}
+.note-body h4 {
+  font-size: 1.1rem;
+  font-family: var(--font-sans);
+  font-weight: 700;
+}
+
+.note-body strong {
+  color: var(--color-ink);
+  font-weight: 650;
+}
+
+.note-body a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.note-body ul,
+.note-body ol {
+  padding-left: 1.4em;
+}
+.note-body ul {
+  list-style: disc;
+}
+.note-body ol {
+  list-style: decimal;
+}
+.note-body li + li {
+  margin-top: 0.4em;
+}
+
+.note-body blockquote {
+  border-left: 3px solid var(--color-accent);
+  padding: 0.1em 0 0.1em 1.1em;
+  color: var(--color-ink);
+  font-family: var(--font-serif);
+  font-size: 1.2rem;
+  font-style: italic;
+}
+
+.note-body img {
+  border-radius: 0.5rem;
+  height: auto;
+  max-width: 100%;
+}
+
+.note-body figure {
+  margin-block: 1.8em;
+}
+
+.note-body figcaption {
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+  margin-top: 0.5em;
+}
+
+.note-body hr {
+  border: 0;
+  border-top: 1px solid var(--color-line);
+  margin-block: 2em;
+}
+
+.note-body table {
+  border-collapse: collapse;
+  display: block;
+  font-size: 0.9375rem;
+  overflow-x: auto;
+  width: 100%;
+}
+
+.note-body th,
+.note-body td {
+  border: 1px solid var(--color-line);
+  padding: 0.5rem 0.7rem;
+  text-align: left;
+}
+
+.note-body th {
+  background: var(--color-surface);
+  color: var(--color-ink);
+}
+
+/* Editor: mismo aspecto que la nota publicada, más el texto guía. */
+.note-editor:focus {
+  outline: none;
+}
+
+.note-editor:empty::before {
+  color: var(--color-muted);
+  content: attr(data-placeholder);
+  pointer-events: none;
 }
