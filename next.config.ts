@@ -3,7 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   // Estos paquetes usan binarios nativos o cargan sus propios assets:
   // deben resolverse en tiempo de ejecución, no empaquetarse.
-  serverExternalPackages: ["better-sqlite3", "mammoth", "pdfjs-dist"],
+  serverExternalPackages: ["mammoth", "pdfjs-dist"],
 
   experimental: {
     serverActions: {
