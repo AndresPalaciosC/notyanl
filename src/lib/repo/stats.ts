@@ -1,5 +1,5 @@
 import "server-only";
-import { getDb } from "../db";
+import { execute, query, queryOne } from "../db";
 import { dayInSiteZone } from "../dates";
 
 export type Metric =
@@ -10,34 +10,46 @@ export type Metric =
   | "banner_click"; // clic en un banner (ref = id)
 
 /** Suma 1 (o `amount`) al contador del día para esa métrica. */
-export function bump(metric: Metric, ref: string | number = "", amount = 1): void {
-  getDb()
-    .prepare(
-      `INSERT INTO stats_daily (day, metric, ref, count) VALUES (?, ?, ?, ?)
-       ON CONFLICT(day, metric, ref) DO UPDATE SET count = count + excluded.count`,
-    )
-    .run(dayInSiteZone(), metric, String(ref), amount);
+export async function bump(
+  metric: Metric,
+  ref: string | number = "",
+  amount = 1,
+): Promise<void> {
+  await execute(
+    `INSERT INTO stats_daily (day, metric, ref, count) VALUES (?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE count = count + VALUES(count)`,
+    [dayInSiteZone(), metric, String(ref), amount],
+  );
 }
 
-/** Versión por lotes: una sola transacción para todos los banners de la página. */
-export function bumpMany(entries: { metric: Metric; ref: string | number }[]): void {
+/**
+ * Versión por lotes: un solo INSERT para todos los banners de la página.
+ * Una sentencia es atómica de por sí, así que no hace falta transacción.
+ */
+export async function bumpMany(
+  entries: { metric: Metric; ref: string | number }[],
+): Promise<void> {
   if (!entries.length) return;
 
-  const db = getDb();
-  const statement = db.prepare(
-    `INSERT INTO stats_daily (day, metric, ref, count) VALUES (?, ?, ?, 1)
-     ON CONFLICT(day, metric, ref) DO UPDATE SET count = count + 1`,
-  );
   const day = dayInSiteZone();
+  const params: (string | number)[] = [];
+  for (const entry of entries) params.push(day, entry.metric, String(entry.ref), 1);
 
-  db.transaction(() => {
-    for (const entry of entries) statement.run(day, entry.metric, String(entry.ref));
-  })();
+  await execute(
+    `INSERT INTO stats_daily (day, metric, ref, count)
+     VALUES ${entries.map(() => "(?, ?, ?, ?)").join(", ")}
+     ON DUPLICATE KEY UPDATE count = count + VALUES(count)`,
+    params,
+  );
 }
 
 export type Range = { from: string; to: string };
 
-export function total(metric: Metric, range?: Range, ref?: string | number): number {
+export async function total(
+  metric: Metric,
+  range?: Range,
+  ref?: string | number,
+): Promise<number> {
   const conditions = ["metric = ?"];
   const params: (string | number)[] = [metric];
 
@@ -50,26 +62,27 @@ export function total(metric: Metric, range?: Range, ref?: string | number): num
     params.push(String(ref));
   }
 
-  const row = getDb()
-    .prepare<(string | number)[], { total: number | null }>(
-      `SELECT SUM(count) AS total FROM stats_daily WHERE ${conditions.join(" AND ")}`,
-    )
-    .get(...params);
+  const row = await queryOne<{ total: number | null }>(
+    `SELECT SUM(count) AS total FROM stats_daily WHERE ${conditions.join(" AND ")}`,
+    params,
+  );
 
-  return row?.total ?? 0;
+  return Number(row?.total ?? 0);
 }
 
 /** Serie diaria de una métrica, rellenando con ceros los días sin tráfico. */
-export function series(metric: Metric, range: Range): { day: string; count: number }[] {
-  const rows = getDb()
-    .prepare<[string, string, string], { day: string; count: number }>(
-      `SELECT day, SUM(count) AS count FROM stats_daily
-       WHERE metric = ? AND day BETWEEN ? AND ?
-       GROUP BY day ORDER BY day`,
-    )
-    .all(metric, range.from, range.to);
+export async function series(
+  metric: Metric,
+  range: Range,
+): Promise<{ day: string; count: number }[]> {
+  const rows = await query<{ day: string; count: number }>(
+    `SELECT day, SUM(count) AS count FROM stats_daily
+     WHERE metric = ? AND day BETWEEN ? AND ?
+     GROUP BY day ORDER BY day`,
+    [metric, range.from, range.to],
+  );
 
-  const byDay = new Map(rows.map((row) => [row.day, row.count]));
+  const byDay = new Map(rows.map((row) => [row.day, Number(row.count)]));
   const out: { day: string; count: number }[] = [];
 
   for (
@@ -86,10 +99,10 @@ export function series(metric: Metric, range: Range): { day: string; count: numb
 }
 
 /** Totales por referencia (nota o banner), de mayor a menor. */
-export function totalsByRef(
+export async function totalsByRef(
   metric: Metric,
   range?: Range,
-): Map<string, number> {
+): Promise<Map<string, number>> {
   const conditions = ["metric = ?"];
   const params: string[] = [metric];
 
@@ -98,39 +111,44 @@ export function totalsByRef(
     params.push(range.from, range.to);
   }
 
-  const rows = getDb()
-    .prepare<string[], { ref: string; count: number }>(
-      `SELECT ref, SUM(count) AS count FROM stats_daily
-       WHERE ${conditions.join(" AND ")}
-       GROUP BY ref ORDER BY count DESC`,
-    )
-    .all(...params);
+  const rows = await query<{ ref: string; count: number }>(
+    `SELECT ref, SUM(count) AS count FROM stats_daily
+     WHERE ${conditions.join(" AND ")}
+     GROUP BY ref ORDER BY count DESC`,
+    params,
+  );
 
-  return new Map(rows.map((row) => [row.ref, row.count]));
+  return new Map(rows.map((row) => [row.ref, Number(row.count)]));
 }
 
 /** Detalle día × banner, para la hoja de Excel. */
-export function bannerDaily(range: Range): {
-  day: string;
-  ref: string;
-  views: number;
-  clicks: number;
-}[] {
-  const rows = getDb()
-    .prepare<[string, string], { day: string; ref: string; metric: string; count: number }>(
-      `SELECT day, ref, metric, SUM(count) AS count FROM stats_daily
-       WHERE metric IN ('banner_view','banner_click') AND day BETWEEN ? AND ?
-       GROUP BY day, ref, metric ORDER BY day, ref`,
-    )
-    .all(range.from, range.to);
+export async function bannerDaily(range: Range): Promise<
+  {
+    day: string;
+    ref: string;
+    views: number;
+    clicks: number;
+  }[]
+> {
+  const rows = await query<{
+    day: string;
+    ref: string;
+    metric: string;
+    count: number;
+  }>(
+    `SELECT day, ref, metric, SUM(count) AS count FROM stats_daily
+     WHERE metric IN ('banner_view','banner_click') AND day BETWEEN ? AND ?
+     GROUP BY day, ref, metric ORDER BY day, ref`,
+    [range.from, range.to],
+  );
 
   const merged = new Map<string, { day: string; ref: string; views: number; clicks: number }>();
 
   for (const row of rows) {
     const key = `${row.day}|${row.ref}`;
     const entry = merged.get(key) ?? { day: row.day, ref: row.ref, views: 0, clicks: 0 };
-    if (row.metric === "banner_view") entry.views = row.count;
-    else entry.clicks = row.count;
+    if (row.metric === "banner_view") entry.views = Number(row.count);
+    else entry.clicks = Number(row.count);
     merged.set(key, entry);
   }
 
@@ -138,9 +156,9 @@ export function bannerDaily(range: Range): {
 }
 
 /** El primer día con datos, para acotar el rango por omisión de la exportación. */
-export function firstDay(): string | null {
-  const row = getDb()
-    .prepare<[], { day: string | null }>("SELECT MIN(day) AS day FROM stats_daily")
-    .get();
+export async function firstDay(): Promise<string | null> {
+  const row = await queryOne<{ day: string | null }>(
+    "SELECT MIN(day) AS day FROM stats_daily",
+  );
   return row?.day ?? null;
 }

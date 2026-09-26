@@ -103,8 +103,8 @@ export async function saveNoteAction(payload: NotePayload): Promise<SaveResult> 
 
   try {
     const note = payload.id
-      ? notes.updateNote(payload.id, input)
-      : notes.createNote(input);
+      ? await notes.updateNote(payload.id, input)
+      : await notes.createNote(input);
 
     if (!note) return { ok: false, error: "La nota ya no existe." };
 
@@ -121,7 +121,7 @@ export async function saveNoteAction(payload: NotePayload): Promise<SaveResult> 
 export async function deleteNoteAction(formData: FormData): Promise<void> {
   await requireAdmin();
   const id = Number(formData.get("id"));
-  if (Number.isFinite(id)) notes.deleteNote(id);
+  if (Number.isFinite(id)) await notes.deleteNote(id);
 
   revalidatePath("/");
   revalidatePath("/admin/notas");
@@ -132,7 +132,7 @@ export async function setNoteStatusAction(formData: FormData): Promise<void> {
   await requireAdmin();
   const id = Number(formData.get("id"));
   const status = formData.get("status") === "published" ? "published" : "draft";
-  if (Number.isFinite(id)) notes.setStatus(id, status);
+  if (Number.isFinite(id)) await notes.setStatus(id, status);
 
   revalidatePath("/");
   revalidatePath("/admin/notas");
@@ -141,7 +141,7 @@ export async function setNoteStatusAction(formData: FormData): Promise<void> {
 export async function toggleFeaturedAction(formData: FormData): Promise<void> {
   await requireAdmin();
   const id = Number(formData.get("id"));
-  if (Number.isFinite(id)) notes.toggleFeatured(id);
+  if (Number.isFinite(id)) await notes.toggleFeatured(id);
 
   revalidatePath("/");
   revalidatePath("/admin/notas");
@@ -209,7 +209,7 @@ export async function uploadImageAction(formData: FormData): Promise<UploadResul
     mime: validation.file.type,
     originalName: validation.file.name,
   });
-  recordMedia(stored, kind, size);
+  await recordMedia(stored, kind, size);
 
   return {
     ok: true,
@@ -262,9 +262,9 @@ export async function createBannerAction(
     mime: validation.file.type,
     originalName: validation.file.name,
   });
-  recordMedia(stored, "banner", size);
+  await recordMedia(stored, "banner", size);
 
-  banners.createBanner({
+  await banners.createBanner({
     title: String(formData.get("title") ?? ""),
     advertiser: String(formData.get("advertiser") ?? ""),
     imageKey: stored.key,
@@ -294,7 +294,7 @@ export async function updateBannerAction(formData: FormData): Promise<void> {
   const id = Number(formData.get("id"));
   if (!Number.isFinite(id)) return;
 
-  banners.updateBanner(id, {
+  await banners.updateBanner(id, {
     title: String(formData.get("title") ?? ""),
     advertiser: String(formData.get("advertiser") ?? ""),
     linkUrl: String(formData.get("linkUrl") ?? ""),
@@ -312,7 +312,7 @@ export async function updateBannerAction(formData: FormData): Promise<void> {
 export async function toggleBannerAction(formData: FormData): Promise<void> {
   await requireAdmin();
   const id = Number(formData.get("id"));
-  if (Number.isFinite(id)) banners.toggleBanner(id);
+  if (Number.isFinite(id)) await banners.toggleBanner(id);
 
   revalidatePath("/");
   revalidatePath("/admin/banners");
@@ -323,7 +323,7 @@ export async function deleteBannerAction(formData: FormData): Promise<void> {
   const id = Number(formData.get("id"));
   if (!Number.isFinite(id)) return;
 
-  const removed = banners.deleteBanner(id);
+  const removed = await banners.deleteBanner(id);
   // El archivo se borra junto con el registro para no dejar basura en disco.
   if (removed) await removeMedia(removed.imageKey);
 
@@ -357,7 +357,7 @@ export async function saveSocialAction(
     values[network.key] = raw;
   }
 
-  saveSocialSettings(values);
+  await saveSocialSettings(values);
   revalidatePath("/", "layout");
 
   return invalid.length
@@ -428,7 +428,7 @@ export async function manageUserAction(
   if (!Number.isFinite(id)) return { error: "Usuario no válido." };
 
   const intent = String(formData.get("intent") ?? "");
-  const target = users.getUserById(id);
+  const target = await users.getUserById(id);
   if (!target) return { error: "Ese usuario ya no existe." };
 
   // Nadie se cierra a sí mismo la puerta por accidente.
@@ -439,7 +439,7 @@ export async function manageUserAction(
   try {
     switch (intent) {
       case "update": {
-        const updated = users.updateUser(id, {
+        const updated = await users.updateUser(id, {
           name: String(formData.get("name") ?? ""),
           role: String(formData.get("role") ?? target.role),
         });
@@ -448,7 +448,7 @@ export async function manageUserAction(
       }
 
       case "toggle": {
-        const updated = users.updateUser(id, { active: !target.active });
+        const updated = await users.updateUser(id, { active: !target.active });
         revalidatePath("/admin/usuarios");
         return {
           notice: updated.active
@@ -469,7 +469,7 @@ export async function manageUserAction(
       }
 
       case "delete": {
-        users.deleteUser(id);
+        await users.deleteUser(id);
         revalidatePath("/admin/usuarios");
         return { notice: `Se eliminó la cuenta de ${target.name}.` };
       }
@@ -513,7 +513,7 @@ export async function changeOwnPasswordAction(
 
   // setPassword invalidó la cookie anterior: se firma una nueva para no echar
   // de la sesión a quien acaba de cambiarla.
-  const refreshed = users.getUserById(me.id);
+  const refreshed = await users.getUserById(me.id);
   if (refreshed) await createSession(refreshed);
 
   return { notice: "Contraseña actualizada." };

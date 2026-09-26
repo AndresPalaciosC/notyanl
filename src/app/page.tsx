@@ -10,17 +10,17 @@ import VisitTracker from "@/components/site/VisitTracker";
 // La publicidad se sortea en cada visita, así que la portada no se cachea.
 export const dynamic = "force-dynamic";
 
-export default function HomePage() {
-  const featuredList = listPublished({ limit: 1, featuredOnly: true });
-  const fallback = featuredList.length ? featuredList : listPublished({ limit: 1 });
+export default async function HomePage() {
+  const featuredList = await listPublished({ limit: 1, featuredOnly: true });
+  const fallback = featuredList.length ? featuredList : await listPublished({ limit: 1 });
   const hero = fallback[0] ?? null;
 
-  const latest = listPublished({
+  const latest = await listPublished({
     limit: 6,
     excludeIds: hero ? [hero.id] : [],
   });
 
-  const recent = listPublished({ limit: 6 });
+  const recent = await listPublished({ limit: 6 });
 
   return (
     <>
@@ -80,8 +80,8 @@ export default function HomePage() {
   );
 }
 
-function CategoryBlock({ slug, label }: { slug: string; label: string }) {
-  const notes = listPublished({ category: slug, limit: 3 });
+async function CategoryBlock({ slug, label }: { slug: string; label: string }) {
+  const notes = await listPublished({ category: slug, limit: 3 });
   if (!notes.length) return null;
 
   return (

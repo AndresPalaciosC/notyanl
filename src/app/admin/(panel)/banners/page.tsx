@@ -12,8 +12,8 @@ import {
 export const metadata: Metadata = { title: "Publicidad" };
 export const dynamic = "force-dynamic";
 
-export default function BannersPage() {
-  const all = listBanners();
+export default async function BannersPage() {
+  const all = await listBanners();
 
   return (
     <div className="space-y-6">

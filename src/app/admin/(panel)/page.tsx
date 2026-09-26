@@ -8,11 +8,11 @@ import { getCategory } from "@/lib/config";
 
 export const metadata: Metadata = { title: "Resumen" };
 
-export default function AdminHome() {
-  const notes = statusCounts();
-  const banners = bannerStats();
-  const media = mediaTotals();
-  const latest = listForAdmin({ limit: 6 });
+export default async function AdminHome() {
+  const notes = await statusCounts();
+  const banners = await bannerStats();
+  const media = await mediaTotals();
+  const latest = await listForAdmin({ limit: 6 });
 
   return (
     <div className="space-y-8">

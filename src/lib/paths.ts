@@ -2,48 +2,45 @@ import path from "node:path";
 import fs from "node:fs";
 
 /**
- * Todo el estado persistente vive bajo un solo directorio, configurable con
- * DATA_DIR: la base SQLite y los archivos subidos.
+ * Dónde viven los archivos subidos (portadas, imágenes de notas y banners).
  *
- * Si DATA_DIR apunta a una ruta que el hosting no deja crear o escribir, se
- * avisa en el registro y se cae a `./data` dentro del proyecto. Antes esto
- * lanzaba una excepción al primer acceso a la base y el sitio entero
- * respondía 500 sin decir por qué, que es un pésimo modo de fallar: una ruta
- * mal puesta en una variable de entorno no debería tumbar el sitio.
+ * Van bajo `public/assets` porque es la carpeta que el hosting conserva entre
+ * despliegues. Que además sea pública no es un problema: son imágenes, y
+ * salen publicadas en el sitio de todas formas.
+ *
+ * La base de datos NO vive aquí. Está en MySQL (ver lib/db.ts), justamente
+ * porque `public` se puede descargar desde internet y ahí no puede estar algo
+ * con cuentas y contraseñas.
  */
 
-const FALLBACK_DIR = path.join(process.cwd(), "data");
+const DEFAULT_UPLOADS = path.join(process.cwd(), "public", "assets", "uploads");
 
-function usable(dir: string): boolean {
+function resolveUploadsDir(): string {
+  const configured = process.env.UPLOADS_DIR?.trim();
+  const target = configured
+    ? path.resolve(/* turbopackIgnore: true */ configured)
+    : DEFAULT_UPLOADS;
+
   try {
-    fs.mkdirSync(/* turbopackIgnore: true */ dir, { recursive: true });
-    fs.accessSync(/* turbopackIgnore: true */ dir, fs.constants.W_OK);
-    return true;
+    fs.mkdirSync(/* turbopackIgnore: true */ target, { recursive: true });
+    fs.accessSync(/* turbopackIgnore: true */ target, fs.constants.W_OK);
+    return target;
   } catch {
-    return false;
+    if (target !== DEFAULT_UPLOADS) {
+      console.error(
+        `[notyac] No se puede escribir en UPLOADS_DIR=${configured}. ` +
+          `Se usara ${DEFAULT_UPLOADS} en su lugar.`,
+      );
+      return DEFAULT_UPLOADS;
+    }
+    // Sin carpeta donde escribir no se pueden subir imágenes, pero el sitio
+    // debe seguir leyéndose: el error se da cuando alguien intente subir algo.
+    console.error(`[notyac] No se puede escribir en ${target}: no se podran subir imagenes.`);
+    return target;
   }
 }
 
-function resolveDataDir(): string {
-  const configured = process.env.DATA_DIR?.trim();
-  if (!configured) return FALLBACK_DIR;
-
-  const target = path.resolve(/* turbopackIgnore: true */ configured);
-  if (usable(target)) return target;
-
-  console.error(
-    `[notyac] No se puede escribir en DATA_DIR=${configured}. ` +
-      `Se usara ${FALLBACK_DIR} en su lugar. Revisa la ruta y los permisos: ` +
-      `mientras tanto los datos podrian perderse al volver a desplegar.`,
-  );
-  return FALLBACK_DIR;
-}
-
-export const DATA_DIR = resolveDataDir();
-
-export const UPLOADS_DIR = path.join(DATA_DIR, "uploads");
-
-export const DB_FILE = path.join(DATA_DIR, "notyac.db");
+export const UPLOADS_DIR = resolveUploadsDir();
 
 export function ensureDataDirs(): void {
   fs.mkdirSync(/* turbopackIgnore: true */ UPLOADS_DIR, { recursive: true });

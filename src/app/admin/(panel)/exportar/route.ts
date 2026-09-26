@@ -21,29 +21,29 @@ export async function GET(request: Request) {
 
   const from = DAY_PATTERN.test(params.get("desde") ?? "")
     ? params.get("desde")!
-    : (stats.firstDay() ?? fallback.from);
+    : (await stats.firstDay() ?? fallback.from);
   const to = DAY_PATTERN.test(params.get("hasta") ?? "")
     ? params.get("hasta")!
     : dayInSiteZone();
 
   const range = from <= to ? { from, to } : { from: to, to: from };
 
-  const visits = stats.total("visit", range);
-  const pageviews = stats.total("pageview", range);
-  const notes = listForAdmin({ limit: 5000 });
-  const banners = listBanners();
-  const counts = statusCounts();
+  const visits = await stats.total("visit", range);
+  const pageviews = await stats.total("pageview", range);
+  const notes = await listForAdmin({ limit: 5000 });
+  const banners = await listBanners();
+  const counts = await statusCounts();
 
-  const readsByNote = stats.totalsByRef("note", range);
-  const viewsByBanner = stats.totalsByRef("banner_view", range);
-  const clicksByBanner = stats.totalsByRef("banner_click", range);
+  const readsByNote = await stats.totalsByRef("note", range);
+  const viewsByBanner = await stats.totalsByRef("banner_view", range);
+  const clicksByBanner = await stats.totalsByRef("banner_click", range);
 
   const rangeViews = sum(viewsByBanner);
   const rangeClicks = sum(clicksByBanner);
 
-  const visitSeries = stats.series("visit", range);
+  const visitSeries = await stats.series("visit", range);
   const pageviewSeries = new Map(
-    stats.series("pageview", range).map((point) => [point.day, point.count]),
+    (await stats.series("pageview", range)).map((point) => [point.day, point.count]),
   );
 
   const bannerById = new Map(banners.map((banner) => [String(banner.id), banner]));
@@ -146,7 +146,7 @@ export async function GET(request: Request) {
         { header: "Vistas", width: 12 },
         { header: "Clics", width: 12 },
       ],
-      rows: stats.bannerDaily(range).map((entry) => {
+      rows: (await stats.bannerDaily(range)).map((entry) => {
         const banner = bannerById.get(entry.ref);
         return [
           entry.day,

@@ -18,13 +18,13 @@ type Props = {
  * cada petición, y dentro del hueco se van turnando solos cada pocos segundos,
  * así que un mismo lector ve varios anunciantes sin recargar la página.
  */
-export default function BannerSlot({
+export default async function BannerSlot({
   position,
   count = 1,
   className = "",
   showPlaceholder = true,
 }: Props) {
-  const groups = pickRotation(position, count, PER_SLOT);
+  const groups = await pickRotation(position, count, PER_SLOT);
 
   // Las impresiones NO se cuentan al renderizar: las reporta VisitTracker
   // cuando el banner entra de verdad en la pantalla del lector.

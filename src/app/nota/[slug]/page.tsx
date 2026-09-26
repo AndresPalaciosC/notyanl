@@ -19,7 +19,7 @@ type Props = { params: Promise<{ slug: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const note = getBySlug(slug, { publishedOnly: true });
+  const note = await getBySlug(slug, { publishedOnly: true });
   if (!note) return { title: "Nota no encontrada" };
 
   const canonical = `/nota/${note.slug}`;
@@ -53,12 +53,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function NotePage({ params }: Props) {
   const { slug } = await params;
-  const note = getBySlug(slug, { publishedOnly: true });
+  const note = await getBySlug(slug, { publishedOnly: true });
   if (!note) notFound();
 
   const category = getCategory(note.category);
-  const related = listRecommended(note, 3);
-  const recent = listPublished({ limit: 6, excludeIds: [note.id] });
+  const related = await listRecommended(note, 3);
+  const recent = await listPublished({ limit: 6, excludeIds: [note.id] });
   const shareUrl = await absoluteUrl(`/nota/${note.slug}`);
 
   return (

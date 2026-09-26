@@ -1,5 +1,5 @@
 import "server-only";
-import { getDb } from "../db";
+import { execute, query, queryOne } from "../db";
 import { nowIso } from "../dates";
 import type { BannerPosition } from "../config";
 
@@ -43,6 +43,8 @@ type Row = {
   updated_at: string;
 };
 
+const POSITIONS = ["top", "sidebar", "inline"];
+
 function toBanner(row: Row): Banner {
   return {
     id: row.id,
@@ -53,7 +55,7 @@ function toBanner(row: Row): Banner {
     width: row.width,
     height: row.height,
     linkUrl: row.link_url,
-    position: (["top", "sidebar", "inline"].includes(row.position)
+    position: (POSITIONS.includes(row.position)
       ? row.position
       : "sidebar") as BannerPosition,
     weight: row.weight,
@@ -82,37 +84,32 @@ export type BannerInput = {
   endsAt?: string | null;
 };
 
-export function createBanner(input: BannerInput): Banner {
+export async function createBanner(input: BannerInput): Promise<Banner> {
   const timestamp = nowIso();
-  const result = getDb()
-    .prepare(
-      `INSERT INTO banners
-         (title, advertiser, image_key, image_url, width, height, link_url,
-          position, weight, active, starts_at, ends_at, created_at, updated_at)
-       VALUES
-         (@title, @advertiser, @imageKey, @imageUrl, @width, @height, @linkUrl,
-          @position, @weight, @active, @startsAt, @endsAt, @createdAt, @updatedAt)`,
-    )
-    .run({
-      title: input.title.trim() || "Banner sin título",
-      advertiser: input.advertiser?.trim() ?? "",
-      imageKey: input.imageKey,
-      imageUrl: input.imageUrl,
-      width: input.width ?? null,
-      height: input.height ?? null,
-      linkUrl: input.linkUrl?.trim() ?? "",
-      position: ["top", "sidebar", "inline"].includes(input.position)
-        ? input.position
-        : "sidebar",
-      weight: clampWeight(input.weight),
-      active: input.active === false ? 0 : 1,
-      startsAt: input.startsAt ?? null,
-      endsAt: input.endsAt ?? null,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    });
+  const result = await execute(
+    `INSERT INTO banners
+       (title, advertiser, image_key, image_url, width, height, link_url,
+        position, weight, active, starts_at, ends_at, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      input.title.trim() || "Banner sin título",
+      input.advertiser?.trim() ?? "",
+      input.imageKey,
+      input.imageUrl,
+      input.width ?? null,
+      input.height ?? null,
+      input.linkUrl?.trim() ?? "",
+      POSITIONS.includes(input.position) ? input.position : "sidebar",
+      clampWeight(input.weight),
+      input.active === false ? 0 : 1,
+      input.startsAt ?? null,
+      input.endsAt ?? null,
+      timestamp,
+      timestamp,
+    ],
+  );
 
-  return getBannerById(Number(result.lastInsertRowid))!;
+  return (await getBannerById(result.insertId))!;
 }
 
 function clampWeight(weight: number | undefined): number {
@@ -131,97 +128,95 @@ export type BannerPatch = {
   endsAt?: string | null;
 };
 
-export function updateBanner(id: number, patch: BannerPatch): Banner | null {
-  const current = getBannerById(id);
+export async function updateBanner(
+  id: number,
+  patch: BannerPatch,
+): Promise<Banner | null> {
+  const current = await getBannerById(id);
   if (!current) return null;
 
-  getDb()
-    .prepare(
-      `UPDATE banners SET
-         title = @title, advertiser = @advertiser, link_url = @linkUrl,
-         position = @position, weight = @weight, active = @active,
-         starts_at = @startsAt, ends_at = @endsAt, updated_at = @updatedAt
-       WHERE id = @id`,
-    )
-    .run({
+  await execute(
+    `UPDATE banners SET
+       title = ?, advertiser = ?, link_url = ?, position = ?, weight = ?,
+       active = ?, starts_at = ?, ends_at = ?, updated_at = ?
+     WHERE id = ?`,
+    [
+      patch.title?.trim() || current.title,
+      patch.advertiser?.trim() ?? current.advertiser,
+      patch.linkUrl?.trim() ?? current.linkUrl,
+      patch.position && POSITIONS.includes(patch.position)
+        ? patch.position
+        : current.position,
+      patch.weight === undefined ? current.weight : clampWeight(patch.weight),
+      (patch.active ?? current.active) ? 1 : 0,
+      patch.startsAt === undefined ? current.startsAt : patch.startsAt,
+      patch.endsAt === undefined ? current.endsAt : patch.endsAt,
+      nowIso(),
       id,
-      title: patch.title?.trim() || current.title,
-      advertiser: patch.advertiser?.trim() ?? current.advertiser,
-      linkUrl: patch.linkUrl?.trim() ?? current.linkUrl,
-      position:
-        patch.position && ["top", "sidebar", "inline"].includes(patch.position)
-          ? patch.position
-          : current.position,
-      weight: patch.weight === undefined ? current.weight : clampWeight(patch.weight),
-      active: (patch.active ?? current.active) ? 1 : 0,
-      startsAt: patch.startsAt === undefined ? current.startsAt : patch.startsAt,
-      endsAt: patch.endsAt === undefined ? current.endsAt : patch.endsAt,
-      updatedAt: nowIso(),
-    });
+    ],
+  );
 
   return getBannerById(id);
 }
 
-export function toggleBanner(id: number): void {
-  getDb()
-    .prepare("UPDATE banners SET active = 1 - active, updated_at = ? WHERE id = ?")
-    .run(nowIso(), id);
+export async function toggleBanner(id: number): Promise<void> {
+  await execute(
+    "UPDATE banners SET active = 1 - active, updated_at = ? WHERE id = ?",
+    [nowIso(), id],
+  );
 }
 
-export function deleteBanner(id: number): Banner | null {
-  const banner = getBannerById(id);
+export async function deleteBanner(id: number): Promise<Banner | null> {
+  const banner = await getBannerById(id);
   if (!banner) return null;
-  getDb().prepare("DELETE FROM banners WHERE id = ?").run(id);
+  await execute("DELETE FROM banners WHERE id = ?", [id]);
   return banner;
 }
 
-export function getBannerById(id: number): Banner | null {
-  const row = getDb().prepare<[number], Row>("SELECT * FROM banners WHERE id = ?").get(id);
+export async function getBannerById(id: number): Promise<Banner | null> {
+  const row = await queryOne<Row>("SELECT * FROM banners WHERE id = ?", [id]);
   return row ? toBanner(row) : null;
 }
 
-export function listBanners(position?: string): Banner[] {
-  const db = getDb();
+export async function listBanners(position?: string): Promise<Banner[]> {
   const rows = position
-    ? db
-        .prepare<[string], Row>(
-          "SELECT * FROM banners WHERE position = ? ORDER BY active DESC, created_at DESC",
-        )
-        .all(position)
-    : db
-        .prepare<[], Row>("SELECT * FROM banners ORDER BY active DESC, created_at DESC")
-        .all();
+    ? await query<Row>(
+        "SELECT * FROM banners WHERE position = ? ORDER BY active DESC, created_at DESC",
+        [position],
+      )
+    : await query<Row>("SELECT * FROM banners ORDER BY active DESC, created_at DESC");
 
   return rows.map(toBanner);
 }
 
 /** Banners vigentes: activos y dentro de su ventana de fechas. */
-export function listEligible(position: BannerPosition): Banner[] {
+export async function listEligible(position: BannerPosition): Promise<Banner[]> {
   const now = nowIso();
-  return getDb()
-    .prepare<[string, string, string], Row>(
-      `SELECT * FROM banners
-       WHERE position = ?
-         AND active = 1
-         AND (starts_at IS NULL OR starts_at <= ?)
-         AND (ends_at   IS NULL OR ends_at   >= ?)`,
-    )
-    .all(position, now, now)
-    .map(toBanner);
+  const rows = await query<Row>(
+    `SELECT * FROM banners
+     WHERE position = ?
+       AND active = 1
+       AND (starts_at IS NULL OR starts_at <= ?)
+       AND (ends_at   IS NULL OR ends_at   >= ?)`,
+    [position, now, now],
+  );
+  return rows.map(toBanner);
 }
 
 /**
  * Reparte los banners vigentes en `slots` huecos para que cada uno vaya
- * rotando solo en el navegador. Se ordena la bolsa con el mismo criterio
- * ponderado y luego se reparte de uno en uno, así que dos huecos de la misma
- * página nunca muestran el mismo anuncio a la vez.
+ * rotando solo en el navegador. Se ordena la bolsa con un criterio ponderado
+ * (Efraimidis–Spirakis: cada banner recibe la llave `random^(1/peso)`, así que
+ * un peso mayor sube la probabilidad de salir adelante sin garantizarlo) y
+ * luego se reparte de uno en uno, para que dos huecos de la misma página no
+ * muestren el mismo anuncio a la vez.
  */
-export function pickRotation(
+export async function pickRotation(
   position: BannerPosition,
   slots: number,
   perSlot: number,
-): Banner[][] {
-  const pool = listEligible(position)
+): Promise<Banner[][]> {
+  const pool = (await listEligible(position))
     .map((banner) => ({
       banner,
       key: Math.random() ** (1 / Math.max(1, banner.weight)),
@@ -238,36 +233,37 @@ export function pickRotation(
   return groups.filter((group) => group.length > 0);
 }
 
-export function recordImpressions(ids: number[]): void {
+export async function recordImpressions(ids: number[]): Promise<void> {
   if (!ids.length) return;
-  getDb()
-    .prepare(
-      `UPDATE banners SET impressions = impressions + 1
-       WHERE id IN (${ids.map(() => "?").join(",")})`,
-    )
-    .run(...ids);
+  await execute(
+    `UPDATE banners SET impressions = impressions + 1
+     WHERE id IN (${ids.map(() => "?").join(",")})`,
+    ids,
+  );
 }
 
-export function recordClick(id: number): void {
-  getDb().prepare("UPDATE banners SET clicks = clicks + 1 WHERE id = ?").run(id);
+export async function recordClick(id: number): Promise<void> {
+  await execute("UPDATE banners SET clicks = clicks + 1 WHERE id = ?", [id]);
 }
 
-export function bannerStats(): { total: number; active: number; byPosition: Record<string, number> } {
-  const rows = getDb()
-    .prepare<[], { position: string; total: number; active: number }>(
-      `SELECT position, COUNT(*) AS total, SUM(active) AS active
-       FROM banners GROUP BY position`,
-    )
-    .all();
+export async function bannerStats(): Promise<{
+  total: number;
+  active: number;
+  byPosition: Record<string, number>;
+}> {
+  const rows = await query<{ position: string; total: number; active: number | null }>(
+    `SELECT position, COUNT(*) AS total, SUM(active) AS active
+     FROM banners GROUP BY position`,
+  );
 
   const byPosition: Record<string, number> = {};
   let total = 0;
   let active = 0;
 
   for (const row of rows) {
-    byPosition[row.position] = row.total;
-    total += row.total;
-    active += row.active ?? 0;
+    byPosition[row.position] = Number(row.total);
+    total += Number(row.total);
+    active += Number(row.active ?? 0);
   }
 
   return { total, active, byPosition };

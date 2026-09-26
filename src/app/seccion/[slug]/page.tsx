@@ -34,17 +34,17 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   const { p } = await searchParams;
   const page = Math.max(1, Number(p) || 1);
 
-  const notes = listPublished({
+  const notes = await listPublished({
     category: slug,
     limit: PER_PAGE,
     offset: (page - 1) * PER_PAGE,
   });
 
-  const total = countPublished(slug);
+  const total = await countPublished(slug);
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
 
   const [lead, ...rest] = notes;
-  const recent = listPublished({ limit: 6 });
+  const recent = await listPublished({ limit: 6 });
 
   return (
     <>

@@ -13,9 +13,9 @@ export const dynamic = "force-dynamic";
 /** Tope prudente: Google admite 50 000 direcciones por archivo. */
 const MAX_NOTES = 2000;
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = siteUrl();
-  const notes = listPublished({ limit: MAX_NOTES });
+  const notes = await listPublished({ limit: MAX_NOTES });
 
   const portada: MetadataRoute.Sitemap = [
     {

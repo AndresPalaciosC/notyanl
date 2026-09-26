@@ -13,7 +13,7 @@ export default async function UsersPage() {
   // El layout ya exigió sesión; aquí sólo se decide cuánto se muestra.
   const me = (await currentUser())!;
   const isAdmin = me.role === "admin";
-  const users = isAdmin ? listUsers() : [];
+  const users = isAdmin ? await listUsers() : [];
 
   return (
     <div className="space-y-8">

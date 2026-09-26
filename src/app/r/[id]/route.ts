@@ -8,11 +8,11 @@ export async function GET(
   context: { params: Promise<{ id: string }> },
 ) {
   const { id } = await context.params;
-  const banner = getBannerById(Number(id));
+  const banner = await getBannerById(Number(id));
 
   if (!banner || !banner.linkUrl) redirect("/");
 
-  recordClick(banner.id); // acumulado histórico
+  await recordClick(banner.id); // acumulado histórico
   bump("banner_click", banner.id); // desglose por día, para el Excel
   redirect(banner.linkUrl);
 }

@@ -37,9 +37,9 @@ export async function POST(request: Request) {
       .filter((id) => Number.isInteger(id) && id > 0)
       .slice(0, 30);
 
-    bumpMany(ids.map((id) => ({ metric: "banner_view" as const, ref: id })));
+    await bumpMany(ids.map((id) => ({ metric: "banner_view" as const, ref: id })));
     // El acumulado histórico vive junto al banner para poder listarlo sin cruces.
-    recordImpressions(ids);
+    await recordImpressions(ids);
     return NextResponse.json({ ok: true });
   }
 

@@ -8,8 +8,8 @@ type Props = {
 };
 
 /** Enlaces a las redes propias. Se configuran en el panel → Ajustes. */
-export default function SocialLinks({ className = "", variant = "bar" }: Props) {
-  const links = listSocialLinks();
+export default async function SocialLinks({ className = "", variant = "bar" }: Props) {
+  const links = await listSocialLinks();
   if (!links.length) return null;
 
   const itemClass =

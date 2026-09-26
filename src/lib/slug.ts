@@ -20,17 +20,19 @@ export function slugify(input: string): string {
 /**
  * Genera un slug único consultando `exists`.
  * Agrega sufijos -2, -3, ... hasta encontrar uno libre.
+ *
+ * `exists` consulta la base, que responde de forma asíncrona.
  */
-export function uniqueSlug(
+export async function uniqueSlug(
   title: string,
-  exists: (slug: string) => boolean,
-): string {
+  exists: (slug: string) => Promise<boolean>,
+): Promise<string> {
   const base = slugify(title);
-  if (!exists(base)) return base;
+  if (!(await exists(base))) return base;
 
   for (let i = 2; i < 500; i++) {
     const candidate = `${base}-${i}`;
-    if (!exists(candidate)) return candidate;
+    if (!(await exists(candidate))) return candidate;
   }
   return `${base}-${Date.now().toString(36)}`;
 }

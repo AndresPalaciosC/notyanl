@@ -18,7 +18,7 @@ export default async function SearchPage({
 }) {
   const { q } = await searchParams;
   const query = (q ?? "").trim();
-  const results = query.length >= 2 ? searchPublished(query) : [];
+  const results = query.length >= 2 ? await searchPublished(query) : [];
 
   return (
     <>

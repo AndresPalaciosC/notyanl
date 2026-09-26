@@ -8,13 +8,13 @@ type Props = { params: Promise<{ id: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  const note = getById(Number(id));
+  const note = await getById(Number(id));
   return { title: note ? `Editar: ${note.title}` : "Nota no encontrada" };
 }
 
 export default async function EditNotePage({ params }: Props) {
   const { id } = await params;
-  const note = getById(Number(id));
+  const note = await getById(Number(id));
   if (!note) notFound();
 
   const initial: NoteFormValues = {

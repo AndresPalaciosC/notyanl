@@ -1,7 +1,7 @@
 import "server-only";
 import { randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
-import { getDb } from "../db";
+import { execute, query, queryOne } from "../db";
 import { nowIso } from "../dates";
 import { MIN_PASSWORD_LENGTH, type User, type UserRole } from "../users-shared";
 
@@ -14,9 +14,8 @@ export {
 } from "../users-shared";
 
 /**
- * Cuentas del panel. Antes había una sola contraseña compartida en el entorno;
- * ahora cada persona entra con su usuario y su contraseña, y queda registro de
- * cuándo entró por última vez.
+ * Cuentas del panel. Cada persona entra con su usuario y su contraseña, y
+ * queda registro de cuándo entró por última vez.
  *
  * Las contraseñas nunca se guardan en claro: se derivan con scrypt y una sal
  * distinta por usuario. Ni el panel ni la base pueden mostrarlas de vuelta.
@@ -125,39 +124,38 @@ function toRole(value: string): UserRole {
 
 /* --------------------------------------------------------------- consultas */
 
-export function listUsers(): User[] {
-  return getDb()
-    .prepare<[], Row>("SELECT * FROM users ORDER BY active DESC, username ASC")
-    .all()
-    .map(toUser);
+export async function listUsers(): Promise<User[]> {
+  const rows = await query<Row>(
+    "SELECT * FROM users ORDER BY active DESC, username ASC",
+  );
+  return rows.map(toUser);
 }
 
-export function getUserById(id: number): User | null {
-  const row = getDb().prepare<[number], Row>("SELECT * FROM users WHERE id = ?").get(id);
+export async function getUserById(id: number): Promise<User | null> {
+  const row = await queryOne<Row>("SELECT * FROM users WHERE id = ?", [id]);
   return row ? toUser(row) : null;
 }
 
-function getRowByUsername(username: string): Row | undefined {
-  return getDb()
-    .prepare<[string], Row>("SELECT * FROM users WHERE username = ?")
-    .get(normalizeUsername(username));
+async function getRowByUsername(username: string): Promise<Row | null> {
+  return queryOne<Row>("SELECT * FROM users WHERE username = ?", [
+    normalizeUsername(username),
+  ]);
 }
 
-export function countUsers(): number {
-  const row = getDb()
-    .prepare<[], { total: number }>("SELECT COUNT(*) AS total FROM users")
-    .get();
-  return row?.total ?? 0;
+export async function countUsers(): Promise<number> {
+  const row = await queryOne<{ total: number }>(
+    "SELECT COUNT(*) AS total FROM users",
+  );
+  return Number(row?.total ?? 0);
 }
 
 /** Administradores activos sin contar al que se está por modificar. */
-function countOtherActiveAdmins(exceptId: number): number {
-  const row = getDb()
-    .prepare<[number], { total: number }>(
-      "SELECT COUNT(*) AS total FROM users WHERE role = 'admin' AND active = 1 AND id != ?",
-    )
-    .get(exceptId);
-  return row?.total ?? 0;
+async function countOtherActiveAdmins(exceptId: number): Promise<number> {
+  const row = await queryOne<{ total: number }>(
+    "SELECT COUNT(*) AS total FROM users WHERE role = 'admin' AND active = 1 AND id != ?",
+    [exceptId],
+  );
+  return Number(row?.total ?? 0);
 }
 
 /* --------------------------------------------------------------- escritura */
@@ -174,93 +172,84 @@ export async function createUser(input: NewUser): Promise<User> {
   assertUsername(username);
   assertPassword(input.password);
 
-  if (getRowByUsername(username)) {
+  if (await getRowByUsername(username)) {
     throw new UserError(`El usuario "${username}" ya existe.`);
   }
 
   const timestamp = nowIso();
-  const result = getDb()
-    .prepare(
-      `INSERT INTO users
-         (username, name, password_hash, role, active, token_version, created_at, updated_at)
-       VALUES (@username, @name, @passwordHash, @role, 1, 1, @createdAt, @updatedAt)`,
-    )
-    .run({
+  const result = await execute(
+    `INSERT INTO users
+       (username, name, password_hash, role, active, token_version, created_at, updated_at)
+     VALUES (?, ?, ?, ?, 1, 1, ?, ?)`,
+    [
       username,
-      name: input.name.trim() || username,
-      passwordHash: await hashPassword(input.password),
-      role: toRole(input.role),
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    });
+      input.name.trim() || username,
+      await hashPassword(input.password),
+      toRole(input.role),
+      timestamp,
+      timestamp,
+    ],
+  );
 
-  return getUserById(Number(result.lastInsertRowid))!;
+  return (await getUserById(result.insertId))!;
 }
 
-export function updateUser(
+export async function updateUser(
   id: number,
   patch: { name?: string; role?: string; active?: boolean },
-): User {
-  const current = getUserById(id);
+): Promise<User> {
+  const current = await getUserById(id);
   if (!current) throw new UserError("Ese usuario ya no existe.");
 
   const role = patch.role === undefined ? current.role : toRole(patch.role);
   const active = patch.active ?? current.active;
 
   // El sitio no puede quedarse sin nadie que administre usuarios.
-  if ((role !== "admin" || !active) && countOtherActiveAdmins(id) === 0) {
+  if ((role !== "admin" || !active) && (await countOtherActiveAdmins(id)) === 0) {
     throw new UserError(
       "Debe quedar al menos un administrador activo. Nombra a otro antes de cambiar este.",
     );
   }
 
-  getDb()
-    .prepare(
-      `UPDATE users
-         SET name = @name, role = @role, active = @active, updated_at = @updatedAt
-       WHERE id = @id`,
-    )
-    .run({
-      id,
-      name: patch.name?.trim() || current.name,
-      role,
-      active: active ? 1 : 0,
-      updatedAt: nowIso(),
-    });
+  await execute(
+    "UPDATE users SET name = ?, role = ?, active = ?, updated_at = ? WHERE id = ?",
+    [patch.name?.trim() || current.name, role, active ? 1 : 0, nowIso(), id],
+  );
 
-  return getUserById(id)!;
+  return (await getUserById(id))!;
 }
 
 export async function setPassword(id: number, plain: string): Promise<void> {
   assertPassword(plain);
-  if (!getUserById(id)) throw new UserError("Ese usuario ya no existe.");
+  if (!(await getUserById(id))) throw new UserError("Ese usuario ya no existe.");
 
-  getDb()
-    .prepare(
-      `UPDATE users
-         SET password_hash = @passwordHash,
-             token_version = token_version + 1,
-             updated_at = @updatedAt
-       WHERE id = @id`,
-    )
-    .run({ id, passwordHash: await hashPassword(plain), updatedAt: nowIso() });
+  await execute(
+    `UPDATE users
+       SET password_hash = ?, token_version = token_version + 1, updated_at = ?
+     WHERE id = ?`,
+    [await hashPassword(plain), nowIso(), id],
+  );
 }
 
-export function deleteUser(id: number): void {
-  const current = getUserById(id);
+export async function deleteUser(id: number): Promise<void> {
+  const current = await getUserById(id);
   if (!current) return;
 
-  if (current.role === "admin" && current.active && countOtherActiveAdmins(id) === 0) {
+  if (
+    current.role === "admin" &&
+    current.active &&
+    (await countOtherActiveAdmins(id)) === 0
+  ) {
     throw new UserError(
       "Es el único administrador activo. Crea otro antes de eliminar esta cuenta.",
     );
   }
 
-  getDb().prepare("DELETE FROM users WHERE id = ?").run(id);
+  await execute("DELETE FROM users WHERE id = ?", [id]);
 }
 
-export function recordLogin(id: number): void {
-  getDb().prepare("UPDATE users SET last_login_at = ? WHERE id = ?").run(nowIso(), id);
+export async function recordLogin(id: number): Promise<void> {
+  await execute("UPDATE users SET last_login_at = ? WHERE id = ?", [nowIso(), id]);
 }
 
 /* -------------------------------------------------------- inicio de sesión */
@@ -276,7 +265,7 @@ export async function authenticate({
   username,
   password,
 }: Credentials): Promise<User | null> {
-  const row = getRowByUsername(username);
+  const row = await getRowByUsername(username);
 
   if (!row) {
     await verifyHash(password, await hashPassword("cuenta-inexistente"));
@@ -286,7 +275,7 @@ export async function authenticate({
   const ok = await verifyHash(password, row.password_hash);
   if (!ok || row.active !== 1) return null;
 
-  recordLogin(row.id);
+  await recordLogin(row.id);
   return toUser(row);
 }
 
@@ -296,7 +285,7 @@ export async function authenticate({
  * usuario, ADMIN_PASSWORD deja de tener efecto.
  */
 export async function ensureSeedUser(): Promise<void> {
-  if (countUsers() > 0) return;
+  if ((await countUsers()) > 0) return;
 
   const password =
     process.env.ADMIN_PASSWORD ||

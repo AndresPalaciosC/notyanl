@@ -1,5 +1,5 @@
 import "server-only";
-import { getDb } from "../db";
+import { execute, query, queryOne } from "../db";
 import { nowIso } from "../dates";
 import { uniqueSlug } from "../slug";
 import { autoSummary, htmlToText, sanitizeBody } from "../sanitize";
@@ -73,6 +73,12 @@ function toNote(row: Row): Note {
   };
 }
 
+/** Entero seguro para interpolar donde MySQL no admite parámetros (LIMIT). */
+function int(value: number, fallback: number, max = 5000): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(0, Math.trunc(value)));
+}
+
 export type NoteInput = {
   title: string;
   summary?: string;
@@ -111,48 +117,50 @@ function normalize(input: NoteInput) {
   };
 }
 
-export function slugExists(slug: string, exceptId?: number): boolean {
-  const row = getDb()
-    .prepare<[string], { id: number }>("SELECT id FROM notes WHERE slug = ?")
-    .get(slug);
+export async function slugExists(slug: string, exceptId?: number): Promise<boolean> {
+  const row = await queryOne<{ id: number }>("SELECT id FROM notes WHERE slug = ?", [slug]);
   if (!row) return false;
   return exceptId === undefined || row.id !== exceptId;
 }
 
-export function createNote(input: NoteInput): Note {
+export async function createNote(input: NoteInput): Promise<Note> {
   const data = normalize(input);
   const timestamp = nowIso();
-  const slug = input.slug?.trim()
-    ? uniqueSlug(input.slug, (s) => slugExists(s))
-    : uniqueSlug(data.title, (s) => slugExists(s));
+  const slug = await uniqueSlug(input.slug?.trim() || data.title, (s) => slugExists(s));
 
   const publishedAt =
     data.status === "published" ? (input.publishedAt ?? timestamp) : (input.publishedAt ?? null);
 
-  const result = getDb()
-    .prepare(
-      `INSERT INTO notes
-         (slug, title, summary, body_html, plain_text, category, author,
-          cover_url, cover_alt, status, featured, source_file,
-          published_at, created_at, updated_at)
-       VALUES
-         (@slug, @title, @summary, @bodyHtml, @plainText, @category, @author,
-          @coverUrl, @coverAlt, @status, @featured, @sourceFile,
-          @publishedAt, @createdAt, @updatedAt)`,
-    )
-    .run({
-      ...data,
+  const result = await execute(
+    `INSERT INTO notes
+       (slug, title, summary, body_html, plain_text, category, author,
+        cover_url, cover_alt, status, featured, source_file,
+        published_at, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
       slug,
+      data.title,
+      data.summary,
+      data.bodyHtml,
+      data.plainText,
+      data.category,
+      data.author,
+      data.coverUrl,
+      data.coverAlt,
+      data.status,
+      data.featured,
+      data.sourceFile,
       publishedAt,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    });
+      timestamp,
+      timestamp,
+    ],
+  );
 
-  return getById(Number(result.lastInsertRowid))!;
+  return (await getById(result.insertId))!;
 }
 
-export function updateNote(id: number, input: NoteInput): Note | null {
-  const current = getById(id);
+export async function updateNote(id: number, input: NoteInput): Promise<Note | null> {
+  const current = await getById(id);
   if (!current) return null;
 
   const data = normalize(input);
@@ -160,65 +168,74 @@ export function updateNote(id: number, input: NoteInput): Note | null {
   const slug =
     requestedSlug === current.slug
       ? current.slug
-      : uniqueSlug(requestedSlug, (s) => slugExists(s, id));
+      : await uniqueSlug(requestedSlug, (s) => slugExists(s, id));
 
   // Al publicar por primera vez se sella la fecha; después se respeta la elegida.
   let publishedAt = input.publishedAt ?? current.publishedAt;
   if (data.status === "published" && !publishedAt) publishedAt = nowIso();
 
-  getDb()
-    .prepare(
-      `UPDATE notes SET
-         slug = @slug, title = @title, summary = @summary, body_html = @bodyHtml,
-         plain_text = @plainText, category = @category, author = @author,
-         cover_url = @coverUrl, cover_alt = @coverAlt, status = @status,
-         featured = @featured, source_file = @sourceFile,
-         published_at = @publishedAt, updated_at = @updatedAt
-       WHERE id = @id`,
-    )
-    .run({
-      ...data,
-      id,
+  await execute(
+    `UPDATE notes SET
+       slug = ?, title = ?, summary = ?, body_html = ?, plain_text = ?,
+       category = ?, author = ?, cover_url = ?, cover_alt = ?, status = ?,
+       featured = ?, source_file = ?, published_at = ?, updated_at = ?
+     WHERE id = ?`,
+    [
       slug,
+      data.title,
+      data.summary,
+      data.bodyHtml,
+      data.plainText,
+      data.category,
+      data.author,
+      data.coverUrl,
+      data.coverAlt,
+      data.status,
+      data.featured,
+      data.sourceFile ?? current.sourceFile,
       publishedAt,
-      sourceFile: data.sourceFile ?? current.sourceFile,
-      updatedAt: nowIso(),
-    });
+      nowIso(),
+      id,
+    ],
+  );
 
   return getById(id);
 }
 
-export function setStatus(id: number, status: NoteStatus): void {
-  const current = getById(id);
+export async function setStatus(id: number, status: NoteStatus): Promise<void> {
+  const current = await getById(id);
   if (!current) return;
 
   const publishedAt =
     status === "published" ? (current.publishedAt ?? nowIso()) : current.publishedAt;
 
-  getDb()
-    .prepare("UPDATE notes SET status = ?, published_at = ?, updated_at = ? WHERE id = ?")
-    .run(status, publishedAt, nowIso(), id);
+  await execute(
+    "UPDATE notes SET status = ?, published_at = ?, updated_at = ? WHERE id = ?",
+    [status, publishedAt, nowIso(), id],
+  );
 }
 
-export function toggleFeatured(id: number): void {
-  getDb()
-    .prepare("UPDATE notes SET featured = 1 - featured, updated_at = ? WHERE id = ?")
-    .run(nowIso(), id);
+export async function toggleFeatured(id: number): Promise<void> {
+  await execute(
+    "UPDATE notes SET featured = 1 - featured, updated_at = ? WHERE id = ?",
+    [nowIso(), id],
+  );
 }
 
-export function deleteNote(id: number): void {
-  getDb().prepare("DELETE FROM notes WHERE id = ?").run(id);
+export async function deleteNote(id: number): Promise<void> {
+  await execute("DELETE FROM notes WHERE id = ?", [id]);
 }
 
-export function getById(id: number): Note | null {
-  const row = getDb().prepare<[number], Row>("SELECT * FROM notes WHERE id = ?").get(id);
+export async function getById(id: number): Promise<Note | null> {
+  const row = await queryOne<Row>("SELECT * FROM notes WHERE id = ?", [id]);
   return row ? toNote(row) : null;
 }
 
-export function getBySlug(slug: string, options?: { publishedOnly?: boolean }): Note | null {
-  const row = getDb()
-    .prepare<[string], Row>("SELECT * FROM notes WHERE slug = ?")
-    .get(slug);
+export async function getBySlug(
+  slug: string,
+  options?: { publishedOnly?: boolean },
+): Promise<Note | null> {
+  const row = await queryOne<Row>("SELECT * FROM notes WHERE slug = ?", [slug]);
   if (!row) return null;
 
   const note = toNote(row);
@@ -243,7 +260,7 @@ export type FeedOptions = {
   featuredOnly?: boolean;
 };
 
-export function listPublished(options: FeedOptions = {}): Note[] {
+export async function listPublished(options: FeedOptions = {}): Promise<Note[]> {
   const { category, limit = 12, offset = 0, excludeIds = [], featuredOnly } = options;
 
   const conditions = [VISIBLE_CLAUSE];
@@ -259,19 +276,17 @@ export function listPublished(options: FeedOptions = {}): Note[] {
     params.push(...excludeIds);
   }
 
-  params.push(limit, offset);
+  const rows = await query<Row>(
+    `SELECT * FROM notes WHERE ${conditions.join(" AND ")}
+     ORDER BY featured DESC, published_at DESC, id DESC
+     LIMIT ${int(limit, 12)} OFFSET ${int(offset, 0)}`,
+    params,
+  );
 
-  return getDb()
-    .prepare<(string | number)[], Row>(
-      `SELECT * FROM notes WHERE ${conditions.join(" AND ")}
-       ORDER BY featured DESC, published_at DESC, id DESC
-       LIMIT ? OFFSET ?`,
-    )
-    .all(...params)
-    .map(toNote);
+  return rows.map(toNote);
 }
 
-export function countPublished(category?: string): number {
+export async function countPublished(category?: string): Promise<number> {
   const conditions = [VISIBLE_CLAUSE];
   const params: (string | number)[] = [nowIso()];
   if (category) {
@@ -279,27 +294,25 @@ export function countPublished(category?: string): number {
     params.push(category);
   }
 
-  const row = getDb()
-    .prepare<(string | number)[], { total: number }>(
-      `SELECT COUNT(*) AS total FROM notes WHERE ${conditions.join(" AND ")}`,
-    )
-    .get(...params);
+  const row = await queryOne<{ total: number }>(
+    `SELECT COUNT(*) AS total FROM notes WHERE ${conditions.join(" AND ")}`,
+    params,
+  );
 
-  return row?.total ?? 0;
+  return Number(row?.total ?? 0);
 }
 
-export function searchPublished(query: string, limit = 30): Note[] {
-  const term = `%${query.trim().toLowerCase()}%`;
-  return getDb()
-    .prepare<[string, string, string, string, number], Row>(
-      `SELECT * FROM notes
-       WHERE ${VISIBLE_CLAUSE}
-         AND (lower(title) LIKE ? OR lower(summary) LIKE ? OR lower(plain_text) LIKE ?)
-       ORDER BY published_at DESC
-       LIMIT ?`,
-    )
-    .all(nowIso(), term, term, term, limit)
-    .map(toNote);
+export async function searchPublished(term: string, limit = 30): Promise<Note[]> {
+  const like = `%${term.trim().toLowerCase()}%`;
+  const rows = await query<Row>(
+    `SELECT * FROM notes
+     WHERE ${VISIBLE_CLAUSE}
+       AND (lower(title) LIKE ? OR lower(summary) LIKE ? OR lower(plain_text) LIKE ?)
+     ORDER BY published_at DESC
+     LIMIT ${int(limit, 30)}`,
+    [nowIso(), like, like, like],
+  );
+  return rows.map(toNote);
 }
 
 export type AdminListOptions = {
@@ -310,8 +323,8 @@ export type AdminListOptions = {
   offset?: number;
 };
 
-export function listForAdmin(options: AdminListOptions = {}): Note[] {
-  const { status = "all", category, query, limit = 50, offset = 0 } = options;
+export async function listForAdmin(options: AdminListOptions = {}): Promise<Note[]> {
+  const { status = "all", category, query: search, limit = 50, offset = 0 } = options;
 
   const conditions: string[] = [];
   const params: (string | number)[] = [];
@@ -324,34 +337,35 @@ export function listForAdmin(options: AdminListOptions = {}): Note[] {
     conditions.push("category = ?");
     params.push(category);
   }
-  if (query?.trim()) {
+  if (search?.trim()) {
     conditions.push("(lower(title) LIKE ? OR lower(plain_text) LIKE ?)");
-    const term = `%${query.trim().toLowerCase()}%`;
-    params.push(term, term);
+    const like = `%${search.trim().toLowerCase()}%`;
+    params.push(like, like);
   }
 
-  params.push(limit, offset);
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
-  return getDb()
-    .prepare<(string | number)[], Row>(
-      `SELECT * FROM notes ${where}
-       ORDER BY COALESCE(published_at, updated_at) DESC, id DESC
-       LIMIT ? OFFSET ?`,
-    )
-    .all(...params)
-    .map(toNote);
+  const rows = await query<Row>(
+    `SELECT * FROM notes ${where}
+     ORDER BY COALESCE(published_at, updated_at) DESC, id DESC
+     LIMIT ${int(limit, 50)} OFFSET ${int(offset, 0)}`,
+    params,
+  );
+
+  return rows.map(toNote);
 }
 
-export function statusCounts(): { published: number; draft: number; total: number } {
-  const rows = getDb()
-    .prepare<[], { status: string; total: number }>(
-      "SELECT status, COUNT(*) AS total FROM notes GROUP BY status",
-    )
-    .all();
+export async function statusCounts(): Promise<{
+  published: number;
+  draft: number;
+  total: number;
+}> {
+  const rows = await query<{ status: string; total: number }>(
+    "SELECT status, COUNT(*) AS total FROM notes GROUP BY status",
+  );
 
-  const published = rows.find((r) => r.status === "published")?.total ?? 0;
-  const draft = rows.find((r) => r.status === "draft")?.total ?? 0;
+  const published = Number(rows.find((r) => r.status === "published")?.total ?? 0);
+  const draft = Number(rows.find((r) => r.status === "draft")?.total ?? 0);
   return { published, draft, total: published + draft };
 }
 
@@ -361,24 +375,24 @@ export function statusCounts(): { published: number; draft: number; total: numbe
  * disponibles por enlace, sección y búsqueda, pero dejan de recomendarse para
  * que la portada no arrastre noticias vencidas.
  */
-export function listRecommended(note: Note, limit = 3): Note[] {
+export async function listRecommended(note: Note, limit = 3): Promise<Note[]> {
   const now = nowIso();
   const cutoff = new Date(
     Date.now() - RECOMMEND_MAX_AGE_DAYS * 24 * 60 * 60 * 1000,
   ).toISOString();
 
-  return getDb()
-    .prepare<[string, string, number, number], Row>(
-      `SELECT * FROM notes
-       WHERE ${VISIBLE_CLAUSE}
-         AND published_at IS NOT NULL
-         AND published_at >= ?
-         AND id != ?
-       ORDER BY RANDOM()
-       LIMIT ?`,
-    )
-    .all(now, cutoff, note.id, limit)
-    .map(toNote);
+  const rows = await query<Row>(
+    `SELECT * FROM notes
+     WHERE ${VISIBLE_CLAUSE}
+       AND published_at IS NOT NULL
+       AND published_at >= ?
+       AND id != ?
+     ORDER BY RAND()
+     LIMIT ${int(limit, 3, 50)}`,
+    [now, cutoff, note.id],
+  );
+
+  return rows.map(toNote);
 }
 
 /** ¿La nota sigue dentro de la ventana de recomendación? */

@@ -1,5 +1,5 @@
 import "server-only";
-import { getDb } from "../db";
+import { execute, queryOne } from "../db";
 import { nowIso } from "../dates";
 import type { IconName } from "@/components/site/icons";
 
@@ -32,43 +32,53 @@ export const SOCIAL_NETWORKS: {
 
 export type SocialLink = { key: SocialKey; label: string; icon: IconName; url: string };
 
-function get(key: string): string {
-  const row = getDb()
-    .prepare<[string], { value: string }>("SELECT value FROM settings WHERE key = ?")
-    .get(key);
+// `key` es palabra reservada en MySQL: va entre acentos graves.
+async function get(key: string): Promise<string> {
+  const row = await queryOne<{ value: string }>(
+    "SELECT value FROM settings WHERE `key` = ?",
+    [key],
+  );
   return row?.value ?? "";
 }
 
-export function setSetting(key: string, value: string): void {
-  getDb()
-    .prepare(
-      `INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
-       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
-    )
-    .run(key, value.trim(), nowIso());
+export async function setSetting(key: string, value: string): Promise<void> {
+  await execute(
+    "INSERT INTO settings (`key`, value, updated_at) VALUES (?, ?, ?) " +
+      "ON DUPLICATE KEY UPDATE value = VALUES(value), updated_at = VALUES(updated_at)",
+    [key, value.trim(), nowIso()],
+  );
 }
 
 /** Las URL configuradas, en el orden en que se muestran. Omite las vacías. */
-export function listSocialLinks(): SocialLink[] {
-  return SOCIAL_NETWORKS.map((network) => ({
-    key: network.key,
-    label: network.label,
-    icon: network.icon,
-    url: get(`social.${network.key}`),
-  })).filter((link) => isSafeUrl(link.url));
+export async function listSocialLinks(): Promise<SocialLink[]> {
+  const links = await Promise.all(
+    SOCIAL_NETWORKS.map(async (network) => ({
+      key: network.key,
+      label: network.label,
+      icon: network.icon,
+      url: await get(`social.${network.key}`),
+    })),
+  );
+  return links.filter((link) => isSafeUrl(link.url));
 }
 
 /** Todas las redes con su valor actual, para el formulario del panel. */
-export function socialSettings(): Record<SocialKey, string> {
+export async function socialSettings(): Promise<Record<SocialKey, string>> {
   const out = {} as Record<SocialKey, string>;
-  for (const network of SOCIAL_NETWORKS) out[network.key] = get(`social.${network.key}`);
+  await Promise.all(
+    SOCIAL_NETWORKS.map(async (network) => {
+      out[network.key] = await get(`social.${network.key}`);
+    }),
+  );
   return out;
 }
 
-export function saveSocialSettings(values: Partial<Record<SocialKey, string>>): void {
+export async function saveSocialSettings(
+  values: Partial<Record<SocialKey, string>>,
+): Promise<void> {
   for (const network of SOCIAL_NETWORKS) {
     const value = values[network.key];
-    if (value !== undefined) setSetting(`social.${network.key}`, value);
+    if (value !== undefined) await setSetting(`social.${network.key}`, value);
   }
 }
 

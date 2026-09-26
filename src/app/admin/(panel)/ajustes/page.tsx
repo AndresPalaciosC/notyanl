@@ -6,8 +6,8 @@ import { CATEGORIES, RECOMMEND_MAX_AGE_DAYS, SITE } from "@/lib/config";
 export const metadata: Metadata = { title: "Ajustes" };
 export const dynamic = "force-dynamic";
 
-export default function SettingsPage() {
-  const values = socialSettings();
+export default async function SettingsPage() {
+  const values = await socialSettings();
 
   return (
     <div className="space-y-6">

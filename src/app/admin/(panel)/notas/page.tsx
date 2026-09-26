@@ -21,7 +21,7 @@ export default async function NotesListPage({ searchParams }: Props) {
     estado === "published" || estado === "draft" ? estado : "all";
   const page = Math.max(1, Number(p) || 1);
 
-  const notes = listForAdmin({
+  const notes = await listForAdmin({
     status,
     category: seccion,
     query: q,

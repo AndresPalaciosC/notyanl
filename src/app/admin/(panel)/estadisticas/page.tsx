@@ -21,22 +21,22 @@ export default async function StatsPage({ searchParams }: Props) {
   const to = DAY_PATTERN.test(hasta ?? "") ? hasta! : dayInSiteZone();
   const range = from <= to ? { from, to } : { from: to, to: from };
 
-  const visits = stats.total("visit", range);
-  const pageviews = stats.total("pageview", range);
-  const series = stats.series("visit", range);
+  const visits = await stats.total("visit", range);
+  const pageviews = await stats.total("pageview", range);
+  const series = await stats.series("visit", range);
   const peak = Math.max(1, ...series.map((point) => point.count));
 
-  const readsByNote = stats.totalsByRef("note", range);
-  const viewsByBanner = stats.totalsByRef("banner_view", range);
-  const clicksByBanner = stats.totalsByRef("banner_click", range);
+  const readsByNote = await stats.totalsByRef("note", range);
+  const viewsByBanner = await stats.totalsByRef("banner_view", range);
+  const clicksByBanner = await stats.totalsByRef("banner_click", range);
 
-  const notes = listForAdmin({ status: "published", limit: 500 });
+  const notes = await listForAdmin({ status: "published", limit: 500 });
   const topNotes = notes
     .map((note) => ({ note, reads: readsByNote.get(String(note.id)) ?? 0 }))
     .sort((a, b) => b.reads - a.reads)
     .slice(0, 10);
 
-  const banners = listBanners()
+  const banners = (await listBanners())
     .map((banner) => {
       const views = viewsByBanner.get(String(banner.id)) ?? 0;
       const clicks = clicksByBanner.get(String(banner.id)) ?? 0;

@@ -36,8 +36,8 @@ function sessionSecret(): string {
 }
 
 /** ¿Hay alguna cuenta con la que se pueda entrar? */
-export function isAdminConfigured(): boolean {
-  if (countUsers() > 0) return true;
+export async function isAdminConfigured(): Promise<boolean> {
+  if ((await countUsers()) > 0) return true;
   // Todavía sin cuentas: sólo sirve si el entorno puede sembrar la primera.
   return process.env.NODE_ENV !== "production" || Boolean(process.env.ADMIN_PASSWORD);
 }
@@ -115,7 +115,7 @@ export async function currentUser(): Promise<User | null> {
   const expiresAt = Number(rawExpiry);
   if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) return null;
 
-  const user = getUserById(Number(rawId));
+  const user = await getUserById(Number(rawId));
   if (!user || !user.active) return null;
 
   // Cambiar la contraseña sube tokenVersion y tumba las sesiones anteriores.
