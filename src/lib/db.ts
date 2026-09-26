@@ -20,11 +20,34 @@ type GlobalWithPool = typeof globalThis & {
 const globalRef = globalThis as GlobalWithPool;
 
 function config(): mysql.PoolOptions {
-  const url = process.env.DATABASE_URL?.trim();
+  // Primero las cinco variables que inyecta la plataforma: en Node.js Hosting
+  // son las únicas credenciales buenas. Si alguien pega además un
+  // DATABASE_URL en los secretos, no debe ganarle a éstas y mandar la
+  // aplicación a otra base.
+  const host = process.env.DB_HOST?.trim();
+  if (host) {
+    return {
+      host,
+      port: Number(process.env.DB_PORT || 3306),
+      user: process.env.DB_USER ?? "",
+      password: process.env.DB_PASSWORD ?? "",
+      database: process.env.DB_NAME ?? "",
+      ...shared(),
+    };
+  }
 
-  // Muchos hospedajes entregan la conexión como una sola URL.
+  // Cadena única: para desarrollo local u otros hospedajes.
+  const url = process.env.DATABASE_URL?.trim();
   if (url) {
-    const parsed = new URL(url);
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      throw new Error(
+        "DATABASE_URL no es una dirección válida. Se espera " +
+          "mysql://usuario:contrasena@servidor:3306/base",
+      );
+    }
     return {
       host: parsed.hostname,
       port: Number(parsed.port || 3306),
@@ -35,30 +58,26 @@ function config(): mysql.PoolOptions {
     };
   }
 
-  const host = process.env.DB_HOST?.trim();
-  if (!host) {
-    throw new Error(
-      "Falta la configuración de la base de datos. Define DATABASE_URL, " +
-        "o bien DB_HOST, DB_USER, DB_PASSWORD y DB_NAME.",
-    );
-  }
-
-  return {
-    host,
-    port: Number(process.env.DB_PORT || 3306),
-    user: process.env.DB_USER ?? "",
-    password: process.env.DB_PASSWORD ?? "",
-    database: process.env.DB_NAME ?? "",
-    ...shared(),
-  };
+  throw new Error(
+    "Falta la configuración de la base de datos. En GoDaddy Node.js Hosting " +
+      "las cinco variables DB_* las inyecta la plataforma sola.",
+  );
 }
 
 function shared(): mysql.PoolOptions {
+  // El hosting corta las conexiones ociosas y limita cuántas admite a la vez:
+  // conviene una cifra modesta.
+  const limit = Math.max(2, Number(process.env.DB_POOL_SIZE) || 5);
+
   return {
     waitForConnections: true,
-    // El hosting compartido corta las conexiones ociosas y suele limitar
-    // cuántas admite a la vez: conviene una cifra modesta.
-    connectionLimit: Number(process.env.DB_POOL_SIZE || 5),
+    connectionLimit: limit,
+    // mysql2 sólo arranca el barrido de conexiones ociosas cuando maxIdle es
+    // MENOR que connectionLimit (lib/base/pool.js). Si se dejan iguales —que
+    // es lo que hace por omisión— idleTimeout queda inerte y el pool acaba
+    // repartiendo conexiones que el servidor ya cerró por su cuenta.
+    maxIdle: limit - 1,
+    idleTimeout: 60_000,
     enableKeepAlive: true,
     charset: "utf8mb4_unicode_ci",
     timezone: "Z",
@@ -228,12 +247,25 @@ async function migrate(): Promise<void> {
   }
 }
 
-/** Comprobación de conexión, para diagnósticos. */
-export async function pingDatabase(): Promise<{ ok: true } | { ok: false; error: string }> {
+/**
+ * Comprobación de conexión, para diagnósticos.
+ *
+ * Consulta el pool directamente, sin pasar por `ready()`: así mide sólo si se
+ * alcanza la base. Si pasara por la migración, un usuario sin permiso de
+ * CREATE TABLE daría "no conecta" cuando en realidad conecta perfectamente.
+ *
+ * El código del error lo trae `err.code` (una constante del protocolo, no
+ * revela credenciales); el mensaje no se devuelve porque puede incluir el
+ * servidor y el usuario.
+ */
+export async function pingDatabase(): Promise<
+  { ok: true } | { ok: false; code: string }
+> {
   try {
-    await query("SELECT 1");
+    await getPool().query("SELECT 1");
     return { ok: true };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    const code = (error as { code?: unknown }).code;
+    return { ok: false, code: typeof code === "string" ? code : "DESCONOCIDO" };
   }
 }
