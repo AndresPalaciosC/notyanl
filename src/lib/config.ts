@@ -5,9 +5,9 @@
 
 export const SITE = {
   /** Nombre editorial: es el que ve el lector en la cabecera y en los títulos. */
-  name: "Notas de Actualidad MTY",
+  name: "Noticias de Actualidad MTY",
   /** El nombre partido, para destacar "MTY" en la cabecera. */
-  nameLead: "Notas de Actualidad",
+  nameLead: "Noticias de Actualidad",
   nameAccent: "MTY",
   tagline: "Política, economía y más, desde Monterrey",
   description:
