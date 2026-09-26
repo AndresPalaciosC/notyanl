@@ -8,6 +8,7 @@ import {
   toggleBannerAction,
   updateBannerAction,
 } from "@/app/admin/actions";
+import ConfirmButton from "@/components/admin/ConfirmButton";
 
 export const metadata: Metadata = { title: "Publicidad" };
 export const dynamic = "force-dynamic";
@@ -151,12 +152,14 @@ function BannerRow({ banner }: { banner: Banner; position: BannerPosition }) {
               </button>
             </form>
 
-            <form action={deleteBannerAction}>
-              <input type="hidden" name="id" value={banner.id} />
-              <button type="submit" className="text-accent hover:underline">
-                Eliminar
-              </button>
-            </form>
+            <ConfirmButton
+              action={deleteBannerAction}
+              fields={{ id: banner.id }}
+              confirm={`¿Eliminar el banner "${banner.title}"?
+
+Se borra tambien su imagen del disco. No se puede deshacer.`}
+              label="Eliminar"
+            />
 
             {banner.linkUrl && (
               <a

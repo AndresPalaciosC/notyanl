@@ -152,6 +152,9 @@ export const SIDEBAR_BANNER_COUNT = 3;
  */
 export const RECOMMEND_MAX_AGE_DAYS = 2;
 
+/** Formatos de imagen que acepta el selector de archivos. */
+export const IMPORT_ACCEPT_IMAGES = "image/jpeg,image/png,image/webp,image/avif,image/gif";
+
 /** Extensiones aceptadas al importar una nota. */
 export const IMPORT_ACCEPT = ".docx,.pdf,.txt,.html,.htm,.md";
 

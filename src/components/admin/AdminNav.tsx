@@ -8,6 +8,7 @@ const LINKS = [
   { href: "/admin", label: "Resumen", exact: true },
   { href: "/admin/notas", label: "Notas" },
   { href: "/admin/notas/nueva", label: "Cargar documento" },
+  { href: "/admin/imagenes", label: "Imágenes" },
   { href: "/admin/banners", label: "Publicidad" },
   { href: "/admin/estadisticas", label: "Estadísticas" },
   { href: "/admin/ajustes", label: "Ajustes" },

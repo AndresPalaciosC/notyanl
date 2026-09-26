@@ -519,6 +519,95 @@ export async function changeOwnPasswordAction(
   return { notice: "Contraseña actualizada." };
 }
 
+/* ---------------------------------------------------------------- imágenes */
+
+/**
+ * Borrado rápido desde la lista de notas, limitado a borradores.
+ *
+ * Una nota publicada ya tiene lectores y enlaces circulando: esa se elimina
+ * desde el editor, donde hace falta abrirla y confirmarlo a conciencia.
+ */
+export async function deleteDraftAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+
+  const id = Number(formData.get("id"));
+  if (!Number.isFinite(id)) return;
+
+  const note = await notes.getById(id);
+  if (!note || note.status === "published") return;
+
+  await notes.deleteNote(id);
+
+  revalidatePath("/");
+  revalidatePath("/admin/notas");
+}
+
+export type MediaState = { error?: string; notice?: string };
+
+/** Sube una o varias imágenes a la galería. */
+export async function uploadMediaAction(
+  _previous: MediaState,
+  formData: FormData,
+): Promise<MediaState> {
+  try {
+    await requireAdmin();
+  } catch (error) {
+    return { error: describe(error) };
+  }
+
+  const entries = formData
+    .getAll("files")
+    .filter((entry): entry is File => entry instanceof File && entry.size > 0);
+
+  if (!entries.length) return { error: "No elegiste ninguna imagen." };
+
+  let guardadas = 0;
+  const fallos: string[] = [];
+
+  for (const file of entries) {
+    const validation = validateImage(file);
+    if (!validation.ok) {
+      fallos.push(`${file.name}: ${validation.error}`);
+      continue;
+    }
+
+    try {
+      const buffer = Buffer.from(await validation.file.arrayBuffer());
+      const size = readImageSize(buffer);
+      const stored = await saveFile(buffer, {
+        mime: validation.file.type,
+        originalName: validation.file.name,
+      });
+      await recordMedia(stored, "note", size);
+      guardadas++;
+    } catch (error) {
+      fallos.push(`${file.name}: ${describe(error)}`);
+    }
+  }
+
+  revalidatePath("/admin/imagenes");
+
+  if (!guardadas) return { error: fallos.join(" · ") || "No se pudo guardar nada." };
+
+  const notice =
+    guardadas === 1 ? "Imagen guardada." : `${guardadas} imágenes guardadas.`;
+
+  return fallos.length ? { notice, error: fallos.join(" · ") } : { notice };
+}
+
+/** Borra la imagen del disco y su registro. */
+export async function deleteMediaAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+
+  const key = String(formData.get("key") ?? "");
+  if (!key) return;
+
+  await removeMedia(key);
+
+  revalidatePath("/admin/imagenes");
+  revalidatePath("/");
+}
+
 function describe(error: unknown): string {
   return error instanceof Error ? error.message : "Error desconocido.";
 }

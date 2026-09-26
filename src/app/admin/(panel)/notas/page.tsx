@@ -3,7 +3,12 @@ import Link from "next/link";
 import { CATEGORIES, getCategory } from "@/lib/config";
 import { formatDateTime } from "@/lib/dates";
 import { listForAdmin, type NoteStatus } from "@/lib/repo/notes";
-import { setNoteStatusAction, toggleFeaturedAction } from "@/app/admin/actions";
+import {
+  deleteDraftAction,
+  setNoteStatusAction,
+  toggleFeaturedAction,
+} from "@/app/admin/actions";
+import ConfirmButton from "@/components/admin/ConfirmButton";
 
 export const metadata: Metadata = { title: "Notas" };
 export const dynamic = "force-dynamic";
@@ -183,7 +188,7 @@ export default async function NotesListPage({ searchParams }: Props) {
                         </button>
                       </form>
 
-                      {note.status === "published" && (
+                      {note.status === "published" ? (
                         <Link
                           href={`/nota/${note.slug}`}
                           target="_blank"
@@ -191,6 +196,15 @@ export default async function NotesListPage({ searchParams }: Props) {
                         >
                           Ver ↗
                         </Link>
+                      ) : (
+                        <ConfirmButton
+                          action={deleteDraftAction}
+                          fields={{ id: note.id }}
+                          confirm={`¿Eliminar el borrador "${note.title}"?
+
+No se puede deshacer.`}
+                          label="Eliminar"
+                        />
                       )}
                     </div>
                   </td>
