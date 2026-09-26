@@ -58,10 +58,12 @@ function config(): mysql.PoolOptions {
     };
   }
 
-  throw new Error(
+  const error = new Error(
     "Falta la configuración de la base de datos. En GoDaddy Node.js Hosting " +
       "las cinco variables DB_* las inyecta la plataforma sola.",
-  );
+  ) as Error & { code: string };
+  error.code = "SIN_CONFIGURACION";
+  throw error;
 }
 
 function shared(): mysql.PoolOptions {

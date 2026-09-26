@@ -5,6 +5,7 @@ import BannerSlot from "@/components/site/BannerSlot";
 import { NoteCard } from "@/components/site/NoteCard";
 import { SIDEBAR_BANNER_COUNT } from "@/lib/config";
 import { searchPublished } from "@/lib/repo/notes";
+import { orEmpty } from "@/lib/resilient";
 import VisitTracker from "@/components/site/VisitTracker";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +19,7 @@ export default async function SearchPage({
 }) {
   const { q } = await searchParams;
   const query = (q ?? "").trim();
-  const results = query.length >= 2 ? await searchPublished(query) : [];
+  const results = query.length >= 2 ? await orEmpty(searchPublished(query)) : [];
 
   return (
     <>

@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { CATEGORIES } from "@/lib/config";
 import { listPublished } from "@/lib/repo/notes";
+import { orEmpty } from "@/lib/resilient";
 import { siteUrl } from "@/lib/url";
 
 /**
@@ -15,7 +16,7 @@ const MAX_NOTES = 2000;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = siteUrl();
-  const notes = await listPublished({ limit: MAX_NOTES });
+  const notes = await orEmpty(listPublished({ limit: MAX_NOTES }));
 
   const portada: MetadataRoute.Sitemap = [
     {

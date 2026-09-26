@@ -7,6 +7,7 @@ import BannerSlot from "@/components/site/BannerSlot";
 import { HeroCard, NoteCard, NoteRow } from "@/components/site/NoteCard";
 import { SIDEBAR_BANNER_COUNT, getCategory, isCategorySlug } from "@/lib/config";
 import { countPublished, listPublished } from "@/lib/repo/notes";
+import { orEmpty, orValue } from "@/lib/resilient";
 import VisitTracker from "@/components/site/VisitTracker";
 
 export const dynamic = "force-dynamic";
@@ -34,17 +35,19 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   const { p } = await searchParams;
   const page = Math.max(1, Number(p) || 1);
 
-  const notes = await listPublished({
-    category: slug,
-    limit: PER_PAGE,
-    offset: (page - 1) * PER_PAGE,
-  });
+  const notes = await orEmpty(
+    listPublished({
+      category: slug,
+      limit: PER_PAGE,
+      offset: (page - 1) * PER_PAGE,
+    }),
+  );
 
-  const total = await countPublished(slug);
+  const total = await orValue(countPublished(slug), 0);
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
 
   const [lead, ...rest] = notes;
-  const recent = await listPublished({ limit: 6 });
+  const recent = await orEmpty(listPublished({ limit: 6 }));
 
   return (
     <>

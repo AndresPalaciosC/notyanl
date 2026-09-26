@@ -1,4 +1,5 @@
 import { pickRotation } from "@/lib/repo/banners";
+import { orEmpty } from "@/lib/resilient";
 import type { BannerPosition } from "@/lib/config";
 import BannerRotator from "./BannerRotator";
 
@@ -24,7 +25,7 @@ export default async function BannerSlot({
   className = "",
   showPlaceholder = true,
 }: Props) {
-  const groups = await pickRotation(position, count, PER_SLOT);
+  const groups = await orEmpty(pickRotation(position, count, PER_SLOT));
 
   // Las impresiones NO se cuentan al renderizar: las reporta VisitTracker
   // cuando el banner entra de verdad en la pantalla del lector.

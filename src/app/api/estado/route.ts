@@ -37,6 +37,8 @@ export async function GET() {
 }
 
 const PISTAS: Record<string, string> = {
+  SIN_CONFIGURACION:
+    "La aplicacion no recibe las variables de la base. Comprueba que esta app tenga aprovisionada su MySQL en Configuracion > Base de datos alojada, y reinicia.",
   ECONNREFUSED:
     "Nadie responde en ese host y puerto. Revisa DB_HOST y DB_PORT, y que la base admita conexiones desde la aplicacion.",
   ENOTFOUND: "El nombre del servidor no existe. Revisa DB_HOST.",

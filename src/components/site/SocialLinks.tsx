@@ -1,4 +1,5 @@
 import { listSocialLinks } from "@/lib/repo/settings";
+import { orEmpty } from "@/lib/resilient";
 import { BrandIcon } from "./icons";
 
 type Props = {
@@ -9,7 +10,7 @@ type Props = {
 
 /** Enlaces a las redes propias. Se configuran en el panel → Ajustes. */
 export default async function SocialLinks({ className = "", variant = "bar" }: Props) {
-  const links = await listSocialLinks();
+  const links = await orEmpty(listSocialLinks());
   if (!links.length) return null;
 
   const itemClass =

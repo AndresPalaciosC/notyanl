@@ -5,22 +5,26 @@ import BannerSlot from "@/components/site/BannerSlot";
 import { HeroCard, NoteCard, NoteRow } from "@/components/site/NoteCard";
 import { CATEGORIES, SIDEBAR_BANNER_COUNT } from "@/lib/config";
 import { listPublished } from "@/lib/repo/notes";
+import { orEmpty } from "@/lib/resilient";
 import VisitTracker from "@/components/site/VisitTracker";
 
 // La publicidad se sortea en cada visita, así que la portada no se cachea.
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const featuredList = await listPublished({ limit: 1, featuredOnly: true });
-  const fallback = featuredList.length ? featuredList : await listPublished({ limit: 1 });
+  // Si la base no responde, la portada sale vacia pero en pie: un 500 aqui
+  // tumbaria el sitio entero y el hosting daria el despliegue por fallido.
+  const featuredList = await orEmpty(listPublished({ limit: 1, featuredOnly: true }));
+  const fallback = featuredList.length
+    ? featuredList
+    : await orEmpty(listPublished({ limit: 1 }));
   const hero = fallback[0] ?? null;
 
-  const latest = await listPublished({
-    limit: 6,
-    excludeIds: hero ? [hero.id] : [],
-  });
+  const latest = await orEmpty(
+    listPublished({ limit: 6, excludeIds: hero ? [hero.id] : [] }),
+  );
 
-  const recent = await listPublished({ limit: 6 });
+  const recent = await orEmpty(listPublished({ limit: 6 }));
 
   return (
     <>
@@ -81,7 +85,7 @@ export default async function HomePage() {
 }
 
 async function CategoryBlock({ slug, label }: { slug: string; label: string }) {
-  const notes = await listPublished({ category: slug, limit: 3 });
+  const notes = await orEmpty(listPublished({ category: slug, limit: 3 }));
   if (!notes.length) return null;
 
   return (
