@@ -1,4 +1,4 @@
-# Noticias de Actualidad MTY
+# Noticias y Actualidad MTY
 
 Sitio de noticias con dos vistas: el **sitio público** (portada, secciones y notas)
 y un **panel de administración** donde se cargan las notas desde Word o PDF, se

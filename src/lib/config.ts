@@ -5,9 +5,9 @@
 
 export const SITE = {
   /** Nombre editorial: es el que ve el lector en la cabecera y en los títulos. */
-  name: "Noticias de Actualidad MTY",
+  name: "Noticias y Actualidad MTY",
   /** El nombre partido, para destacar "MTY" en la cabecera. */
-  nameLead: "Noticias de Actualidad",
+  nameLead: "Noticias y Actualidad",
   nameAccent: "MTY",
   tagline: "Política, economía y más, desde Monterrey",
   description:
@@ -17,9 +17,10 @@ export const SITE = {
 } as const;
 
 export type CategorySlug =
-  | "mundo"
-  | "pais"
+  | "internacional"
+  | "nacional"
   | "nuevo-leon"
+  | "opinion"
   | "cultura"
   | "espectaculos"
   | "deportes"
@@ -38,16 +39,16 @@ export type Category = {
 
 export const CATEGORIES: Category[] = [
   {
-    slug: "mundo",
-    label: "Actualidad Mundial",
-    navLabel: "Mundial",
+    slug: "internacional",
+    label: "Internacional",
+    navLabel: "Internacional",
     description: "Lo que ocurre fuera de México y cómo nos afecta.",
     accent: "bg-indigo-700",
   },
   {
-    slug: "pais",
-    label: "El País",
-    navLabel: "El País",
+    slug: "nacional",
+    label: "Nacional",
+    navLabel: "Nacional",
     description: "Política, economía y sociedad a nivel nacional.",
     accent: "bg-accent",
   },
@@ -57,6 +58,13 @@ export const CATEGORIES: Category[] = [
     navLabel: "Nuevo León",
     description: "Monterrey y el estado: gobierno, obra pública y comunidad.",
     accent: "bg-emerald-700",
+  },
+  {
+    slug: "opinion",
+    label: "Opinión",
+    navLabel: "Opinión",
+    description: "Columnas, análisis y punto de vista de nuestras firmas.",
+    accent: "bg-slate-700",
   },
   {
     slug: "cultura",
@@ -91,7 +99,7 @@ export const CATEGORIES: Category[] = [
 export const CATEGORY_SLUGS = CATEGORIES.map((c) => c.slug);
 
 /** Sección por omisión cuando el valor guardado ya no existe. */
-export const DEFAULT_CATEGORY: CategorySlug = "pais";
+export const DEFAULT_CATEGORY: CategorySlug = "nacional";
 
 export function getCategory(slug: string): Category {
   return (
