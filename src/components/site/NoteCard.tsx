@@ -19,9 +19,12 @@ export function CategoryBadge({ slug }: { slug: string }) {
 function Cover({
   note,
   className,
+  priority = false,
 }: {
   note: Note;
   className: string;
+  /** La imagen de apertura no se difiere: suele ser el elemento mas grande. */
+  priority?: boolean;
 }) {
   if (!note.coverUrl) {
     return (
@@ -39,31 +42,48 @@ function Cover({
     <img
       src={note.coverUrl}
       alt={note.coverAlt || note.title}
-      loading="lazy"
+      // Las medidas acompanan a la proporcion 16/9 que fija la clase: el
+      // navegador reserva el hueco antes de descargar y la pagina no salta.
+      width={1600}
+      height={900}
+      loading={priority ? "eager" : "lazy"}
+      fetchPriority={priority ? "high" : undefined}
+      decoding={priority ? "sync" : "async"}
       className={`${className} bg-surface object-cover`}
     />
   );
 }
 
 /** Nota principal de la portada. */
-export function HeroCard({ note }: { note: Note }) {
+export function HeroCard({
+  note,
+  as: Heading = "h2",
+}: {
+  note: Note;
+  /** h1 en la portada, donde este titular es el encabezado de la pagina. */
+  as?: "h1" | "h2";
+}) {
   return (
     <article className="group">
       {/* Sin foto no se dibuja un bloque gris gigante: la entrada queda como
           un titular de plana, que es lo que hace un diario impreso. */}
       {note.coverUrl && (
         <Link href={`/nota/${note.slug}`} className="block">
-          <Cover note={note} className="aspect-[16/9] w-full rounded-md" />
+          <Cover
+            note={note}
+            className="aspect-[16/9] w-full rounded-md"
+            priority={Heading === "h1"}
+          />
         </Link>
       )}
 
       <div className={note.coverUrl ? "mt-4" : ""}>
         <CategoryBadge slug={note.category} />
-        <h2 className="mt-2 font-serif text-3xl leading-tight text-ink sm:text-4xl">
+        <Heading className="mt-2 font-serif text-3xl leading-tight text-ink sm:text-4xl">
           <Link href={`/nota/${note.slug}`} className="group-hover:text-accent">
             {note.title}
           </Link>
-        </h2>
+        </Heading>
         <p className="mt-3 line-clamp-3 text-[15px] leading-relaxed text-ink-soft">
           {note.summary}
         </p>
@@ -107,11 +127,11 @@ export function NoteRow({ note, index }: { note: Note; index?: number }) {
         </span>
       )}
       <div className="min-w-0 flex-1">
-        <h4 className="line-clamp-3 text-sm font-medium leading-snug text-ink">
+        <h3 className="line-clamp-3 text-sm font-medium leading-snug text-ink">
           <Link href={`/nota/${note.slug}`} className="group-hover:text-accent">
             {note.title}
           </Link>
-        </h4>
+        </h3>
         <p className="mt-1 text-xs text-muted">{formatDate(note.publishedAt)}</p>
       </div>
     </article>

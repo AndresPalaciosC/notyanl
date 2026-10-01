@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import SiteHeader from "@/components/site/SiteHeader";
 import SiteFooter from "@/components/site/SiteFooter";
@@ -9,6 +10,12 @@ import { orEmpty } from "@/lib/resilient";
 import VisitTracker from "@/components/site/VisitTracker";
 
 // La publicidad se sortea en cada visita, así que la portada no se cachea.
+export const metadata: Metadata = {
+  // La portada vive en la raiz: sin canonical, cualquier variante con
+  // parametros de campana se indexa como pagina distinta.
+  alternates: { canonical: "/" },
+};
+
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
@@ -39,7 +46,7 @@ export default async function HomePage() {
         ) : (
           <div className="mt-8 grid gap-10 lg:grid-cols-[minmax(0,1fr)_320px]">
             <div className="min-w-0">
-              <HeroCard note={hero} />
+              <HeroCard note={hero} as="h1" />
 
               {latest.length > 0 && (
                 <>

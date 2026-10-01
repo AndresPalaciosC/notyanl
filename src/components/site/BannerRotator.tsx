@@ -87,8 +87,10 @@ function BannerImage({
     <img
       src={banner.imageUrl}
       alt={banner.title}
-      width={banner.width ?? undefined}
-      height={banner.height ?? undefined}
+      // Sin medidas reales se declaran las de la proporcion 3.75:1 que fija
+      // la clase, para que el navegador reserve el hueco igualmente.
+      width={banner.width ?? 1500}
+      height={banner.height ?? 400}
       loading={eager ? "eager" : "lazy"}
       fetchPriority={eager ? "high" : undefined}
       // Marca que VisitTracker observa para contar la impresión.

@@ -24,7 +24,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!isCategorySlug(slug)) return { title: "Sección" };
 
   const category = getCategory(slug);
-  return { title: category.label, description: category.description };
+  return {
+    title: category.label,
+    description: category.description,
+    // Sin canonical, la misma sección con ?p=2 o con parámetros de campaña
+    // se indexa como páginas distintas y compiten entre sí.
+    alternates: { canonical: `/seccion/${category.slug}` },
+  };
 }
 
 export default async function CategoryPage({ params, searchParams }: Props) {
