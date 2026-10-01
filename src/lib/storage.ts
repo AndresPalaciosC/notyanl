@@ -5,8 +5,11 @@ import crypto from "node:crypto";
 import { UPLOADS_DIR, ensureDataDirs } from "./paths";
 
 /**
- * Capa de archivos. Toda la app habla con esta interfaz, nunca con `fs`
- * directamente, para poder sustituir el disco local por S3/Blob más adelante.
+ * Capa de archivos.
+ *
+ * El disco del contenedor es sólo una CACHÉ: el hosting lo reemplaza en cada
+ * despliegue. Los bytes de verdad viven en la base de datos (ver
+ * `lib/repo/media.ts`), que es lo único que sobrevive.
  */
 export type StoredFile = {
   /** Ruta relativa dentro del almacén, p. ej. "2026/08/a1b2c3.jpg". */
@@ -82,6 +85,18 @@ export async function saveFile(
   await fs.writeFile(destination, data);
 
   return { key, url: urlForKey(key), mime: options.mime, size: data.length };
+}
+
+/** Repuebla la caché de disco. Si falla, no pasa nada: se sirve desde la base. */
+export async function writeCache(key: string, data: Buffer): Promise<void> {
+  try {
+    const destination = resolveKey(key);
+    if (!destination) return;
+    await fs.mkdir(path.dirname(destination), { recursive: true });
+    await fs.writeFile(destination, data);
+  } catch {
+    // Disco lleno o de sólo lectura: la base sigue sirviendo el archivo.
+  }
 }
 
 export async function deleteFile(key: string): Promise<void> {

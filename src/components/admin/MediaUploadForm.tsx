@@ -41,7 +41,7 @@ export default function MediaUploadForm() {
           className="mt-1.5 w-full rounded border border-line bg-paper px-3 py-2 text-sm outline-none file:mr-3 file:rounded file:border-0 file:bg-surface-strong file:px-3 file:py-1 file:text-sm file:text-ink hover:file:bg-line focus:border-accent"
         />
         <p className="mt-1 text-xs text-muted">
-          JPG, PNG, WebP, AVIF o GIF. Hasta 25 MB cada una. Puedes elegir varias.
+          JPG, PNG, WebP, AVIF o GIF. Hasta 8 MB cada una. Puedes elegir varias.
         </p>
       </div>
 

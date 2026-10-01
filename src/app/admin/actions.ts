@@ -12,7 +12,7 @@ import {
 import * as users from "@/lib/repo/users";
 import { localInputToIso } from "@/lib/dates";
 import { checkBannerAspect, readImageSize } from "@/lib/images";
-import { MAX_UPLOAD_BYTES } from "@/lib/config";
+import { MAX_IMAGE_BYTES, MAX_UPLOAD_BYTES } from "@/lib/config";
 import { ALLOWED_IMAGE_MIME, saveFile } from "@/lib/storage";
 import { recordMedia, removeMedia } from "@/lib/repo/media";
 import { ImportError, importDocument, type ImportResult } from "@/lib/importers";
@@ -209,7 +209,7 @@ export async function uploadImageAction(formData: FormData): Promise<UploadResul
     mime: validation.file.type,
     originalName: validation.file.name,
   });
-  await recordMedia(stored, kind, size);
+  await recordMedia(stored, kind, size, buffer);
 
   return {
     ok: true,
@@ -225,8 +225,11 @@ function validateImage(
   if (!(file instanceof File) || file.size === 0) {
     return { ok: false, error: "No se recibió ninguna imagen." };
   }
-  if (file.size > MAX_UPLOAD_BYTES) {
-    return { ok: false, error: "La imagen supera el límite de 25 MB." };
+  if (file.size > MAX_IMAGE_BYTES) {
+    return {
+      ok: false,
+      error: `La imagen supera el límite de ${Math.round(MAX_IMAGE_BYTES / 1024 / 1024)} MB.`,
+    };
   }
   if (!ALLOWED_IMAGE_MIME.has(file.type)) {
     return {
@@ -262,7 +265,7 @@ export async function createBannerAction(
     mime: validation.file.type,
     originalName: validation.file.name,
   });
-  await recordMedia(stored, "banner", size);
+  await recordMedia(stored, "banner", size, buffer);
 
   await banners.createBanner({
     title: String(formData.get("title") ?? ""),
@@ -578,7 +581,7 @@ export async function uploadMediaAction(
         mime: validation.file.type,
         originalName: validation.file.name,
       });
-      await recordMedia(stored, "note", size);
+      await recordMedia(stored, "note", size, buffer);
       guardadas++;
     } catch (error) {
       fallos.push(`${file.name}: ${describe(error)}`);

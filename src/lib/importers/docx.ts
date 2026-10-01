@@ -27,9 +27,12 @@ export async function importDocx(
     }
 
     try {
-      const data = await image.read();
-      const stored = await saveFile(Buffer.from(data), { mime });
-      recordMedia(stored, "note", readImageSize(Buffer.from(data)));
+      const bytes = Buffer.from(await image.read());
+      const stored = await saveFile(bytes, { mime });
+      // Con `await` y con los bytes: sin esperar, la nota podia guardarse
+      // antes de que la imagen quedara registrada, y sin los bytes la foto
+      // se perdia en el siguiente despliegue.
+      await recordMedia(stored, "note", readImageSize(bytes), bytes);
       images++;
       return { src: stored.url, alt: source.altText || "" };
     } catch {

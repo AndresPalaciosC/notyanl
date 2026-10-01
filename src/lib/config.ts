@@ -167,3 +167,11 @@ export const IMPORT_ACCEPT_IMAGES = "image/jpeg,image/png,image/webp,image/avif,
 export const IMPORT_ACCEPT = ".docx,.pdf,.txt,.html,.htm,.md";
 
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024; // 25 MB
+
+/**
+ * Tope de las imagenes, mas bajo que el de los documentos: ahora viajan
+ * dentro de una consulta a MySQL, y los servidores limitan el tamano de cada
+ * paquete (max_allowed_packet, a menudo 16 o 64 MB). 8 MB sobra para una foto
+ * de prensa y deja margen de sobra.
+ */
+export const MAX_IMAGE_BYTES = 8 * 1024 * 1024; // 8 MB

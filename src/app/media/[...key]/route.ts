@@ -1,9 +1,13 @@
-import { mimeForKey, readFile } from "@/lib/storage";
+import { mimeForKey, readFile, writeCache } from "@/lib/storage";
+import { readMediaBlob } from "@/lib/repo/media";
 
 /**
- * Sirve los archivos subidos desde DATA_DIR/uploads. Se hace por ruta y no
- * desde /public para que el contenido subido no dependa del árbol estático
- * y pueda migrarse a un almacenamiento externo cambiando sólo lib/storage.
+ * Sirve los archivos subidos.
+ *
+ * Primero mira el disco del contenedor, que hace de caché rápida. Si no está
+ * —porque el hosting reemplazó el contenedor en el último despliegue— lo
+ * recupera de la base de datos y lo vuelve a dejar en disco para las próximas
+ * peticiones.
  */
 export async function GET(
   _request: Request,
@@ -12,15 +16,25 @@ export async function GET(
   const { key } = await context.params;
   const path = key.map(decodeURIComponent).join("/");
 
-  const file = await readFile(path);
-  if (!file) {
+  const cached = await readFile(path);
+  if (cached) return send(cached.data, mimeForKey(path), cached.size);
+
+  const stored = await readMediaBlob(path);
+  if (!stored) {
     return new Response("Archivo no encontrado", { status: 404 });
   }
 
-  return new Response(new Uint8Array(file.data), {
+  // Se repuebla la caché sin bloquear la respuesta: si falla, da igual.
+  void writeCache(path, stored.data);
+
+  return send(stored.data, stored.mime || mimeForKey(path), stored.data.length);
+}
+
+function send(data: Buffer, mime: string, size: number): Response {
+  return new Response(new Uint8Array(data), {
     headers: {
-      "Content-Type": mimeForKey(path),
-      "Content-Length": String(file.size),
+      "Content-Type": mime,
+      "Content-Length": String(size),
       // Las claves llevan un hash aleatorio: el contenido nunca cambia.
       "Cache-Control": "public, max-age=31536000, immutable",
       "X-Content-Type-Options": "nosniff",

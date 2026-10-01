@@ -34,16 +34,25 @@ function limitOf(value: number, fallback: number): number {
   return Number.isFinite(value) ? Math.min(1000, Math.max(1, Math.trunc(value))) : fallback;
 }
 
-/** Registra un archivo ya escrito en el almacén para poder inventariarlo y borrarlo. */
+/**
+ * Registra un archivo subido, guardando también sus bytes.
+ *
+ * Los bytes van a la base y no sólo al disco porque el hosting reemplaza el
+ * sistema de archivos del contenedor en cada despliegue: las imágenes
+ * guardadas sólo en disco desaparecen, y las notas quedan apuntando a fotos
+ * rotas. El disco se sigue usando como caché (ver lib/storage.ts).
+ */
 export async function recordMedia(
   file: StoredFile,
   kind: MediaKind,
   size?: { width: number; height: number } | null,
+  data?: Buffer,
 ): Promise<void> {
-  // IGNORE: si el mismo archivo se registra dos veces no es un error.
+  // Si el mismo archivo se registra dos veces, se conservan los bytes.
   await execute(
-    "INSERT IGNORE INTO media (`key`, url, mime, size, width, height, kind, created_at) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO media (`key`, url, mime, size, width, height, kind, created_at, data) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+      "ON DUPLICATE KEY UPDATE data = COALESCE(VALUES(data), data)",
     [
       file.key,
       file.url,
@@ -53,8 +62,21 @@ export async function recordMedia(
       size?.height ?? null,
       kind,
       nowIso(),
+      data ?? null,
     ],
   );
+}
+
+/** Los bytes de un archivo, para cuando ya no están en el disco del contenedor. */
+export async function readMediaBlob(
+  key: string,
+): Promise<{ data: Buffer; mime: string } | null> {
+  const row = await queryOne<{ data: Buffer | null; mime: string }>(
+    "SELECT data, mime FROM media WHERE `key` = ?",
+    [key],
+  );
+  if (!row?.data) return null;
+  return { data: Buffer.from(row.data), mime: row.mime };
 }
 
 /** Borra el archivo del disco y su registro. */

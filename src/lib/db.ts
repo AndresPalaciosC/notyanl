@@ -240,12 +240,36 @@ async function migrate(): Promise<void> {
        width       INT NULL,
        height      INT NULL,
        kind        VARCHAR(16) NOT NULL DEFAULT 'note',
-       created_at  CHAR(24) NOT NULL
+       created_at  CHAR(24) NOT NULL,
+       -- Los bytes de la imagen viven aqui: el disco del contenedor se
+       -- reemplaza en cada despliegue y se perderian.
+       data        LONGBLOB NULL
      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
   ];
 
   for (const statement of statements) {
     await pool.query(statement);
+  }
+
+  // Instalaciones anteriores tienen la tabla `media` sin la columna `data`.
+  await ensureColumn(pool, "media", "data", "LONGBLOB NULL");
+}
+
+/** Agrega una columna sólo si todavía no existe. */
+async function ensureColumn(
+  pool: mysql.Pool,
+  table: string,
+  column: string,
+  definition: string,
+): Promise<void> {
+  const [rows] = await pool.query(
+    `SELECT COUNT(*) AS total FROM information_schema.columns
+     WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?`,
+    [table, column],
+  );
+  const total = Number((rows as { total: number }[])[0]?.total ?? 0);
+  if (total === 0) {
+    await pool.query(`ALTER TABLE \`${table}\` ADD COLUMN \`${column}\` ${definition}`);
   }
 }
 
